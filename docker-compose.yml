@@ -1,0 +1,13 @@
+services:
+  redeemer:
+    build: .
+    restart: unless-stopped
+    environment:
+      REDEEMER_ADMIN_PASSWORD: ${REDEEMER_ADMIN_PASSWORD:?set it in .env}
+    volumes:
+      - redeemer-data:/data
+    ports:
+      - "8787:8787"
+
+volumes:
+  redeemer-data:

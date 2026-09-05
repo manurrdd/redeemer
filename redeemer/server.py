@@ -15,10 +15,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import views
+from . import export, views
 from .backup import dump, filename, load, schedule, snapshot
 from .db import (
     COUNTRY,
+    DAY,
     DEVICE,
     NONCE,
     PLATFORM,
@@ -138,9 +139,12 @@ class Handler(BaseHTTPRequestHandler):
         self._body = b"".join(chunks)
         return self._body
 
+    def queries(self, name: str) -> list[str]:
+        return [value[:64] for value in parse_qs(urlparse(self.path).query).get(name, [])]
+
     def query(self, name: str) -> str:
-        values = parse_qs(urlparse(self.path).query).get(name)
-        return values[0][:64] if values else ""
+        values = self.queries(name)
+        return values[0] if values else ""
 
     def upload(self, field: str) -> bytes:
         """The panel has one file field, so multipart is read here instead of pulled in."""
@@ -245,11 +249,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.html(self.render_dashboard())
         if path == "/apps/new":
             return self.html(views.new_app(self.db.apps()))
-        if path == "/backup":
-            return self.html(self.render_backup())
+        if path == "/data":
+            return self.html(self.render_data())
+        if path == "/data/export":
+            return self.data_export()
         if path == "/backup.db.gz":
-            return self.send(200, dump(self.db), "application/gzip",
-                             [("Content-Disposition", f'attachment; filename="{filename()}"')])
+            return self.download(dump(self.db), "application/gzip", filename())
         if path == "/global":
             return self.html(self.render_app(None, None, fresh=self.query("batch")))
         if path == "/global/codes.csv":
@@ -410,7 +415,7 @@ class Handler(BaseHTTPRequestHandler):
             "quota_mode": data.get("quota_mode", "shared"),
             "note": data.get("note", ""),
             "max_uses": self.number(data.get("max_uses")),
-            "expires_at": self.expiry(data.get("expires_at")),
+            "expires_at": self.day(data.get("expires_at"), end=True),
             "platforms": data.get("platforms", ""),
         }
         batch = generate_batch()
@@ -435,9 +440,10 @@ class Handler(BaseHTTPRequestHandler):
         return self.redirect(f"{target}?batch={batch}")
 
     @staticmethod
-    def expiry(value: str | None) -> str | None:
-        """A date input gives a day; a code lives until the end of it."""
-        return f"{value}T23:59:59Z" if value else None
+    def day(value: str | None, *, end: bool = False) -> str | None:
+        """A date input gives a day; a moment is needed to compare it against a timestamp."""
+        value = clean(value, DAY)
+        return None if value is None else f"{value}T{"23:59:59" if end else "00:00:00"}Z"
 
     def render_dashboard(self) -> str:
         return views.dashboard(
@@ -466,40 +472,59 @@ class Handler(BaseHTTPRequestHandler):
     def codes_csv(self, app_slug: str | None) -> None:
         if app_slug is not None and self.db.app(app_slug) is None:
             return self.html(views.not_found(self.db.apps()), 404)
-        rows = ["code,note,uses,max_uses,expires_at,enabled,quota_mode,apps"]
-        for c in self.db.codes(app_slug, batch=self.query("batch")):
-            note = c["note"].replace('"', '""')
-            rows.append(
-                f'{c["code"]},"{note}",{c["uses"]},{c["max_uses"] if c["max_uses"] is not None else ""},'
-                f'{c["expires_at"] or ""},{"yes" if c["enabled"] else "no"},{c["quota_mode"]},'
-                f'{"all" if c["is_global"] else ";".join(self.db.code_apps(c["id"]))}'
-            )
-        name = f"{app_slug or 'global'}-codes.csv"
-        self.send(
-            200,
-            "\n".join(rows).encode(),
-            "text/csv; charset=utf-8",
-            [("Content-Disposition", f'attachment; filename="{name}"')],
+        payload, _, content_type = export.build(
+            self.db, fmt="csv", datasets=("codes",),
+            slugs=[app_slug] if app_slug else None, only_global=app_slug is None,
+            batch=self.query("batch"),
         )
+        self.download(payload, content_type, f"{app_slug or 'global'}-codes.csv")
 
-    def render_backup(self, error: str = "") -> str:
+    def data_export(self) -> None:
+        scope = self.query("scope") or "all"
+        slugs = self.queries("app")
+        try:
+            if scope not in export.SCOPES:
+                raise ValueError("Choose all or selected apps.")
+            if scope == "selected" and not slugs:
+                raise ValueError("Select at least one app.")
+            payload, suffix, content_type = export.build(
+                self.db,
+                fmt=self.query("format") or "csv",
+                datasets=self.queries("include"),
+                slugs=slugs if scope == "selected" else None,
+                status=self.query("status") or "all",
+                since=self.day(self.query("from")),
+                until=self.day(self.query("to"), end=True),
+                devices=self.query("devices") == "1",
+            )
+        except ValueError as error:
+            return self.html(self.render_data(str(error)), 400)
+        self.download(payload, content_type, export.filename(suffix))
+
+    def download(self, payload: bytes, content_type: str, name: str) -> None:
+        self.send(200, payload, content_type,
+                  [("Content-Disposition", f'attachment; filename="{name}"')])
+
+    def render_data(self, error: str = "", restore_error: str = "") -> str:
         files = sorted(Path(self.config.backup_dir).glob("redeemer-*.db.gz"))
         latest = (
             f"{datetime.fromtimestamp(files[-1].stat().st_mtime, timezone.utc):%Y-%m-%d %H:%M}"
             if files else ""
         )
-        return views.backup_page(self.db.apps(), len(files), latest, error)
+        values = parse_qs(urlparse(self.path).query) if error else {}
+        return views.data_page(self.db.apps(), len(files), latest, values, error, restore_error)
 
     def restore(self) -> None:
         try:
             snapshot(self.db, self.config.backup_dir, self.config.backup_keep)
             load(self.db, self.upload("file"))
         except ValueError as error:
-            return self.html(self.render_backup(str(error)), 400)
+            return self.html(self.render_data(restore_error=str(error)), 400)
         return self.redirect("/")
 
     def update_code(self, code: str) -> None:
-        if self.db.code(code) is None:
+        current = self.db.code(code)
+        if current is None:
             return self.html(views.not_found(self.db.apps()), 404)
         data = self.form()
         try:
@@ -507,10 +532,10 @@ class Handler(BaseHTTPRequestHandler):
                 code,
                 note=data.get("note", ""),
                 max_uses=self.number(data.get("max_uses")),
-                expires_at=self.expiry(data.get("expires_at")),
+                expires_at=self.day(data.get("expires_at"), end=True),
                 platforms=data.get("platforms", ""),
                 enabled=data.get("enabled") == "1",
-                quota_mode=data.get("quota_mode", "shared"),
+                quota_mode=data.get("quota_mode", current["quota_mode"]),
             )
         except ValueError:
             return self.html(views.not_found(self.db.apps()), 400)

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import io
 import json
 import tempfile
 import threading
 import unittest
+import zipfile
 from http.client import HTTPConnection
 from pathlib import Path
 
@@ -244,7 +246,7 @@ class HttpTest(unittest.TestCase):
         cookie = self.login()
         _, blob = self.request("GET", "/backup.db.gz", headers={"Cookie": cookie})
         self.upload(cookie, blob)
-        response, _ = self.request("GET", "/backup", headers={"Cookie": cookie})
+        response, _ = self.request("GET", "/data", headers={"Cookie": cookie})
         self.assertEqual(response.status, 200)
 
     def test_restore_rejects_anything_else(self):
@@ -298,7 +300,7 @@ class HttpTest(unittest.TestCase):
 
     def test_invalid_selection_preserves_form_and_creates_nothing(self):
         headers = {"Cookie": self.login(), "Content-Type": "application/x-www-form-urlencoded"}
-        response, body = self.request("POST", "/a/99arcade/codes",
+        response, body = self.request("POST", "/global/codes",
                                        "code=CHOSEN&scope=selected&quota_mode=per_app", headers)
         self.assertEqual(response.status, 400)
         self.assertIn(b"Select at least one app", body)
@@ -313,6 +315,50 @@ class HttpTest(unittest.TestCase):
     def test_healthz(self):
         response, data = self.request("GET", "/healthz")
         self.assertEqual((response.status, json.loads(data)), (200, {"ok": True}))
+
+    def export(self, query: str, cookie: str):
+        return self.request("GET", f"/data/export?{query}", headers={"Cookie": cookie})
+
+    def test_export_formats(self):
+        cookie = self.login()
+        self.redeem(app="99arcade", code="FREE99", device_id="d1")
+        response, csv = self.export("include=codes", cookie)
+        self.assertEqual(response.status, 200)
+        self.assertIn(".csv", response.getheader("Content-Disposition"))
+        self.assertIn(b"FREE99", csv)
+        response, blob = self.export("include=codes&include=redemptions&devices=1", cookie)
+        archive = zipfile.ZipFile(io.BytesIO(blob))
+        self.assertEqual(archive.namelist(), ["codes.csv", "redemptions.csv"])
+        self.assertIn(b"d1", archive.read("redemptions.csv"))
+        _, blob = self.export("include=codes&include=redemptions", cookie)
+        self.assertNotIn(b"d1", zipfile.ZipFile(io.BytesIO(blob)).read("redemptions.csv"))
+        _, body = self.export("format=json&include=codes&include=apps", cookie)
+        data = json.loads(body)
+        self.assertEqual([c["code"] for c in data["codes"]], ["FREE99"])
+        self.assertEqual(data["apps"][0]["slug"], "99arcade")
+        _, body = self.export("format=txt", cookie)
+        self.assertEqual(body, b"FREE99")
+
+    def test_export_scope_and_filters(self):
+        cookie = self.login()
+        self.server.db.add_app("second", "Second")
+        self.server.db.add_code("SECOND1", "second")
+        self.redeem(app="99arcade", code="FREE99", device_id="d1")
+        _, body = self.export("scope=selected&app=second&include=codes", cookie)
+        self.assertIn(b"SECOND1", body)
+        self.assertNotIn(b"FREE99", body)
+        _, body = self.export("include=codes&status=unused", cookie)
+        self.assertIn(b"SECOND1", body)
+        self.assertNotIn(b"FREE99", body)
+        _, body = self.export("include=redemptions&from=2000-01-01&to=2000-01-02", cookie)
+        self.assertEqual(len(body.decode().strip().splitlines()), 1)
+
+    def test_export_rejects_bad_options(self):
+        cookie = self.login()
+        for query in ("include=", "scope=selected&include=codes", "format=xml&include=codes",
+                      "scope=nowhere&include=codes", "include=codes&status=nope"):
+            response, _ = self.export(query, cookie)
+            self.assertEqual(response.status, 400, query)
 
 
 if __name__ == "__main__":

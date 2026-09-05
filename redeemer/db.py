@@ -69,8 +69,16 @@ CODE = re.compile(r"^[A-Z0-9-]{4,32}$")
 PLATFORM = re.compile(r"^[a-z0-9_.-]{1,16}$")
 VERSION = re.compile(r"^[A-Za-z0-9_.+-]{1,32}$")
 COUNTRY = re.compile(r"^[A-Z]{2}$")
+DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 BREAKDOWN_FIELDS = ("platform", "country", "app_version", "app_slug")
+
+CODE_FILTERS = {
+    "all": "",
+    "active": "c.enabled = 1",
+    "disabled": "c.enabled = 0",
+    "unused": "NOT EXISTS (SELECT 1 FROM redemptions r WHERE r.code_id = c.id)",
+}
 
 # What a code may be restricted to. None means any platform, including ones not listed here.
 PLATFORM_SCOPES = {
@@ -351,6 +359,74 @@ class Database:
             SELECT c.*, (SELECT group_concat(app_slug, ", ") FROM code_apps WHERE code_id = c.id) AS app_names, (SELECT COUNT(*) FROM redemptions r WHERE r.code_id = c.id) AS uses
               FROM codes c WHERE {" AND ".join(where)}
              ORDER BY c.created_at DESC, c.code
+            """,
+            params,
+        ).fetchall()
+
+    # --- export -------------------------------------------------------------
+
+    @staticmethod
+    def _in(column: str, slugs) -> tuple[str, list]:
+        return f"{column} IN ({','.join('?' * len(slugs))})", list(slugs)
+
+    def export_apps(self, slugs=None) -> list[sqlite3.Row]:
+        where, params = self._in("slug", slugs) if slugs else ("1", [])
+        return self.conn.execute(
+            f"""
+            SELECT slug, name, created_at,
+                   (SELECT COUNT(*) FROM redemptions r WHERE r.app_slug = apps.slug) AS redemptions
+              FROM apps WHERE {where} ORDER BY slug
+            """,
+            params,
+        ).fetchall()
+
+    def export_codes(
+        self, *, slugs=None, only_global: bool = False, status: str = "all",
+        batch: str | None = None,
+    ) -> list[sqlite3.Row]:
+        where, params = ["1"], []
+        if only_global:
+            where.append("c.is_global = 1")
+        elif slugs:
+            clause, values = self._in("ca.app_slug", slugs)
+            where.append(f"(c.is_global = 1 OR EXISTS (SELECT 1 FROM code_apps ca"
+                         f" WHERE ca.code_id = c.id AND {clause}))")
+            params += values
+        if status not in CODE_FILTERS:
+            raise ValueError("Unknown code filter.")
+        where.append(CODE_FILTERS[status] or "1")
+        if batch:
+            where.append("c.batch = ?")
+            params.append(batch)
+        return self.conn.execute(
+            f"""
+            SELECT c.*,
+                   (SELECT group_concat(app_slug, ";")
+                      FROM (SELECT app_slug FROM code_apps WHERE code_id = c.id
+                             ORDER BY app_slug)) AS app_names,
+                   (SELECT COUNT(*) FROM redemptions r WHERE r.code_id = c.id) AS uses
+              FROM codes c WHERE {" AND ".join(where)}
+             ORDER BY c.created_at DESC, c.code
+            """,
+            params,
+        ).fetchall()
+
+    def export_redemptions(self, *, slugs=None, since=None, until=None) -> list[sqlite3.Row]:
+        where, params = ["1"], []
+        if slugs:
+            clause, values = self._in("r.app_slug", slugs)
+            where.append(clause)
+            params += values
+        for bound, comparison in ((since, ">="), (until, "<=")):
+            if bound:
+                where.append(f"r.redeemed_at {comparison} ?")
+                params.append(bound)
+        return self.conn.execute(
+            f"""
+            SELECT r.redeemed_at, r.app_slug, r.platform, r.app_version, r.country, r.device_id,
+                   (SELECT code FROM codes WHERE id = r.code_id) AS code
+              FROM redemptions r WHERE {" AND ".join(where)}
+             ORDER BY r.redeemed_at DESC, r.id DESC
             """,
             params,
         ).fetchall()

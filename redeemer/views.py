@@ -2,140 +2,237 @@ from __future__ import annotations
 
 from html import escape
 
+from .export import DATASETS, FORMATS, STATUS
+from .export import SCOPES as EXPORT_SCOPES
+
 CSS = """
 :root {
-  color-scheme: light dark;
-  --bg: #fff; --side: #fafafa; --line: #e8e9ec; --line-soft: #f1f2f4;
-  --ink: #16181d; --muted: #62697a; --faint: #9aa0ad;
-  --accent: #3d5afe; --accent-soft: #eef1ff;
-  --ok: #15803d; --bad: #dc2626; --bar: #dfe4fd;
+  color-scheme: light;
+  --canvas: #f7f6f3; --side: #f2f0ec; --surface: #fff; --raised: #faf9f6;
+  --line: #e5e1d9; --line-soft: #efece6;
+  --ink: #1b1a17; --muted: #6b665c; --faint: #9c968a;
+  --accent: #0f7a55; --accent-ink: #0b6046; --accent-soft: #e4f0ea;
+  --bad: #b3261e; --bad-soft: #fbecea;
+  --btn: #23211d; --btn-ink: #faf9f6;
+  --shadow: 0 1px 2px rgba(28, 25, 20, .05), 0 4px 14px rgba(28, 25, 20, .03);
+  --ring: 0 0 0 3px rgba(15, 122, 85, .16);
 }
 @media (prefers-color-scheme: dark) {
-  :root { --bg: #0f1115; --side: #14161b; --line: #24272f; --line-soft: #1b1e24;
-          --ink: #e8eaee; --muted: #9199a8; --faint: #6a7180;
-          --accent: #7d94ff; --accent-soft: #1a1f38; --ok: #4ade80; --bad: #f87171;
-          --bar: #232a45; }
+  :root {
+    color-scheme: dark;
+    --canvas: #0d0e10; --side: #101215; --surface: #16181c; --raised: #1b1e22;
+    --line: #272a30; --line-soft: #202328;
+    --ink: #eceae5; --muted: #9b978f; --faint: #6e6b66;
+    --accent: #4ecb96; --accent-ink: #7bdcb1; --accent-soft: #16261f;
+    --bad: #f5796b; --bad-soft: #2a1614;
+    --btn: #eceae5; --btn-ink: #16181c;
+    --shadow: none;
+    --ring: 0 0 0 3px rgba(78, 203, 150, .18);
+  }
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--ink);
-       font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-       -webkit-font-smoothing: antialiased; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--canvas); color: var(--ink);
+       font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, ui-sans-serif,
+             system-ui, sans-serif;
+       -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 a { color: inherit; text-decoration: none; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .muted { color: var(--muted); }
 .faint { color: var(--faint); }
 
 /* ---- shell ---- */
-.shell { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
-.shell.collapsed { grid-template-columns: 56px 1fr; }
-aside { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column;
-        gap: 2px; padding: 10px; background: var(--side);
-        border-right: 1px solid var(--line); }
-.shell.collapsed aside { padding: 10px 8px; }
-.side-head { display: flex; align-items: center; height: 40px; margin-bottom: 6px; }
-.brand { flex: 1; padding-left: 10px; font-size: 15px; font-weight: 650; letter-spacing: -.01em; }
-.toggle { flex: none; width: 32px; height: 32px; display: grid; place-items: center; border: 0;
-          border-radius: 8px; background: transparent; color: var(--faint); cursor: pointer;
-          padding: 0; }
-.toggle:hover { background: var(--line); color: var(--ink); }
+.shell { display: grid; grid-template-columns: 246px 1fr; min-height: 100vh; }
+.shell.collapsed { grid-template-columns: 60px 1fr; }
+aside { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 2px;
+        padding: 14px 12px; background: var(--side); border-right: 1px solid var(--line); }
+.shell.collapsed aside { padding: 14px 10px; }
+.side-head { display: flex; align-items: center; gap: 10px; height: 38px; margin-bottom: 12px;
+             padding-left: 4px; }
+.mark { flex: none; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px;
+        background: var(--accent); color: #fff; font-size: 13px; font-weight: 700; letter-spacing: -.02em; }
+.brand { flex: 1; font-size: 15px; font-weight: 640; letter-spacing: -.015em; }
+.toggle { flex: none; width: 30px; height: 30px; display: grid; place-items: center; padding: 0;
+          border: 0; border-radius: 8px; background: transparent; color: var(--faint); cursor: pointer; }
+.toggle:hover { background: var(--line-soft); color: var(--ink); }
 .shell.collapsed .brand { display: none; }
-.shell.collapsed .side-head { justify-content: center; }
+.shell.collapsed .side-head { position: relative; justify-content: center; padding: 0; }
+.shell.collapsed .toggle { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0;
+                           background: var(--side); }
+.shell.collapsed .toggle:hover { opacity: 1; background: var(--line-soft); }
+@media (hover: none) { .shell.collapsed .toggle { opacity: 1; } }
 
-nav { display: flex; flex-direction: column; gap: 2px; min-height: 0;
-      overflow: hidden auto; }
-.item { flex: none; height: 36px; display: flex; align-items: center; gap: 10px; padding: 0 10px;
-        border-radius: 8px; color: var(--muted); font-size: 14px; white-space: nowrap;
-        border: 0; background: none; font-family: inherit; cursor: pointer; width: 100%; }
+nav { display: flex; flex-direction: column; gap: 1px; min-height: 0; overflow: hidden auto; }
+.item { flex: none; height: 36px; width: 100%; display: flex; align-items: center; gap: 10px;
+        padding: 0 10px; border: 1px solid transparent; border-radius: 9px; background: none;
+        color: var(--muted); font: inherit; font-size: 13.5px; white-space: nowrap; cursor: pointer; }
 .item:hover { background: var(--line-soft); color: var(--ink); }
-.item.on { background: var(--accent-soft); color: var(--accent); font-weight: 550; }
+.item.on { background: var(--surface); border-color: var(--line); color: var(--ink); font-weight: 560;
+           box-shadow: var(--shadow); }
+.item.on svg { color: var(--accent); }
 .item svg, .item .avatar { flex: none; }
-.avatar { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 5px;
+.avatar { display: grid; place-items: center; width: 19px; height: 19px; border-radius: 6px;
           background: var(--line); color: var(--muted); font-size: 9px; font-weight: 700; }
 .item.on .avatar { background: var(--accent); color: #fff; }
 .item .label { overflow: hidden; text-overflow: ellipsis; }
 .shell.collapsed .item { padding: 0; justify-content: center; }
 .shell.collapsed .item .label, .shell.collapsed .group { display: none; }
-.group { flex: none; margin: 14px 10px 4px; font-size: 11px; font-weight: 600; color: var(--faint);
-         letter-spacing: .04em; }
-.side-foot { flex: none; margin-top: auto; padding-top: 6px; }
+.group { flex: none; margin: 18px 10px 6px; font-size: 10.5px; font-weight: 650; color: var(--faint);
+         letter-spacing: .08em; text-transform: uppercase; }
+.side-foot { flex: none; margin-top: auto; padding-top: 8px; }
 
 /* ---- page ---- */
-main { padding: 34px 36px 80px; min-width: 0; }
-.wrap { max-width: 900px; margin: 0 auto; }
-.head { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 6px; }
+main { padding: 40px 44px 96px; min-width: 0; }
+.wrap { max-width: 1000px; margin: 0 auto; }
+.head { display: flex; align-items: flex-start; gap: 20px; margin-bottom: 22px; }
 .head form { margin-left: auto; }
-h1 { margin: 0; font-size: 21px; font-weight: 620; letter-spacing: -.02em; }
-h1.mono { font-size: 20px; letter-spacing: 0; }
-.facts { margin: 0 0 26px; color: var(--muted); font-size: 13px; }
-.facts b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
-section { margin-top: 30px; }
-.title { display: flex; align-items: baseline; gap: 10px; margin: 0 0 10px; font-size: 13px;
-         font-weight: 600; }
-.title a { color: var(--accent); font-weight: 500; font-size: 12.5px; }
-.box { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
-.box.pad { padding: 14px; }
-.split { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-@media (max-width: 800px) { .split { grid-template-columns: 1fr; } }
+h1 { margin: 0; font-size: 25px; font-weight: 620; letter-spacing: -.025em; }
+h1.mono { font-size: 22px; letter-spacing: -.01em; }
+.sub { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
+.lead { margin: -8px 0 24px; max-width: 62ch; color: var(--muted); font-size: 13.5px; }
+section { margin-top: 34px; }
+.title { display: flex; align-items: center; gap: 12px; margin: 0 0 12px; font-size: 11px;
+         font-weight: 650; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+.title a { margin-left: auto; color: var(--accent-ink); font-size: 12px; font-weight: 550;
+           letter-spacing: 0; text-transform: none; }
+.title a:hover { text-decoration: underline; }
+.box { background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+       box-shadow: var(--shadow); overflow: hidden; }
+.box.pad { padding: 18px; }
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.split section { display: flex; flex-direction: column; margin-top: 0; }
+.split .box { flex: 1; }
+@media (max-width: 860px) { .split { grid-template-columns: 1fr; } }
+
+/* ---- stats ---- */
+.stats { display: flex; flex-wrap: wrap; margin: -4px 0 4px; }
+.stat { padding: 0 26px; border-right: 1px solid var(--line); }
+.stat:first-child { padding-left: 0; }
+.stat:last-child { padding-right: 0; border-right: 0; }
+.stat b { display: block; font-size: 22px; font-weight: 600; letter-spacing: -.03em;
+          font-variant-numeric: tabular-nums; }
+.stat span { display: block; color: var(--muted); font-size: 12.5px; }
+
+/* ---- chips ---- */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 4px; }
+.chip { display: inline-flex; align-items: center; gap: 7px; height: 27px; padding: 0 12px;
+        border: 1px solid var(--line); border-radius: 999px; background: var(--surface);
+        color: var(--muted); font-size: 12.5px; }
+.chip a { color: var(--accent-ink); font-weight: 550; }
+.chip a:hover { text-decoration: underline; }
+.chip.on, .chip.off { padding-left: 11px; }
+.chip.on::before, .chip.off::before { content: ""; width: 5px; height: 5px; border-radius: 50%;
+                                      background: var(--faint); }
+.chip.on { border-color: transparent; background: var(--accent-soft); color: var(--accent-ink); }
+.chip.on::before { background: var(--accent); }
 
 /* ---- tables ---- */
 .scroll { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
-th { text-align: left; font-size: 12px; font-weight: 550; color: var(--faint); padding: 9px 14px;
-     white-space: nowrap; background: var(--side); border-bottom: 1px solid var(--line); }
-td { padding: 10px 14px; border-top: 1px solid var(--line-soft); white-space: nowrap; }
+th { text-align: left; padding: 10px 16px; background: var(--raised); color: var(--faint);
+     border-bottom: 1px solid var(--line); font-size: 10.5px; font-weight: 650;
+     letter-spacing: .07em; text-transform: uppercase; white-space: nowrap; }
+td { padding: 11px 16px; border-top: 1px solid var(--line-soft); white-space: nowrap; }
 tbody tr:first-child td { border-top: 0; }
+tbody tr:hover td { background: var(--raised); }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-td.act { text-align: right; padding: 6px 8px; }
-.code-link { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13.5px;
-             font-weight: 550; }
-.code-link:hover { color: var(--accent); }
+td.act { text-align: right; padding: 5px 8px; }
+.code-link { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px;
+             font-weight: 560; letter-spacing: -.01em; }
+.code-link:hover { color: var(--accent-ink); text-decoration: underline; }
 tr.fresh td { background: var(--accent-soft); }
 tr.fresh td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
-.fresh-note { display: flex; align-items: baseline; gap: 10px; margin: 0 0 10px;
-              font-size: 13px; color: var(--accent); }
-.fresh-note a { font-weight: 550; }
-.empty { padding: 34px 16px; text-align: center; color: var(--faint); font-size: 13.5px; }
-.dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 7px;
-       vertical-align: 1px; background: var(--ok); }
-.dot.off { background: var(--faint); }
+tr.fresh:hover td { background: var(--accent-soft); }
+.fresh-note { display: flex; align-items: center; gap: 12px; margin: 0 0 12px; padding: 10px 14px;
+              border: 1px solid var(--line); border-radius: 11px; background: var(--accent-soft);
+              color: var(--accent-ink); font-size: 13px; }
+.fresh-note a { margin-left: auto; font-weight: 560; }
+.fresh-note a:hover { text-decoration: underline; }
+.empty { padding: 32px 18px; text-align: center; color: var(--faint); font-size: 13.5px; }
+.empty a { color: var(--accent-ink); font-weight: 550; }
+.pill { display: inline-flex; align-items: center; gap: 6px; height: 23px; padding: 0 10px;
+        border-radius: 999px; background: var(--line-soft); color: var(--muted); font-size: 12px; }
+.pill::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--faint); }
+.pill.on { background: var(--accent-soft); color: var(--accent-ink); }
+.pill.on::before { background: var(--accent); }
+
+/* ---- rows ---- */
+.bar { display: flex; align-items: center; gap: 12px; padding: 13px 18px; }
+.bar + .bar { border-top: 1px solid var(--line-soft); }
+.bar b { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.bar form { display: flex; flex: 1; align-items: center; gap: 12px; margin: 0; }
+.bar form button { margin-left: auto; }
 
 /* ---- forms ---- */
-.fields { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
-label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--muted); }
-fieldset { border: 1px solid var(--line); border-radius: 7px; padding: 5px 10px; min-width: 0; }
-legend { color: var(--muted); font-size: 12px; }
-label.check { flex-direction: row; align-items: center; gap: 7px; height: 34px; }
-input, select { height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 7px;
-                background: var(--bg); color: var(--ink); font: inherit; font-size: 13.5px; }
-input[type=date] { padding-right: 6px; }
-input[type=file] { padding: 6px 8px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); gap: 16px; }
+.grid > .wide { grid-column: span 2; }
+@media (max-width: 560px) { .grid > .wide { grid-column: auto; } }
+label { display: flex; flex-direction: column; gap: 6px; min-width: 0; color: var(--muted);
+        font-size: 12px; font-weight: 550; }
+fieldset { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 10px 22px; margin: 0;
+           padding: 12px 14px; border: 1px solid var(--line); border-radius: 11px;
+           background: var(--raised); }
+legend { padding: 0 5px; color: var(--muted); font-size: 12px; font-weight: 550; }
+.hint { color: var(--faint); font-size: 11.5px; font-weight: 450; }
+label.check { flex-direction: row; align-items: center; gap: 8px; color: var(--ink); font-size: 13px;
+              font-weight: 450; }
+.grid > label.check { align-self: end; height: 36px; }
+input, select { width: 100%; height: 36px; padding: 0 11px; border: 1px solid var(--line);
+                border-radius: 9px; background: var(--surface); color: var(--ink); font: inherit;
+                font-size: 13.5px; }
+select { appearance: none; padding-right: 30px; background-image:
+  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' \
+viewBox='0 0 24 24' fill='none' stroke='%238a857a' stroke-width='2.4' stroke-linecap='round' \
+stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 11px center; }
+input[type=file] { max-width: 400px; height: auto; padding: 8px 10px; }
+input[type=checkbox] { width: auto; height: auto; accent-color: var(--accent); }
 input::placeholder { color: var(--faint); }
-input:focus, select:focus { outline: none; border-color: var(--accent);
-                            box-shadow: 0 0 0 3px var(--accent-soft); }
-button { height: 34px; padding: 0 15px; border: 1px solid transparent; border-radius: 7px;
-         background: var(--accent); color: #fff; font: inherit; font-size: 13.5px; font-weight: 550;
-         cursor: pointer; }
-button:hover { filter: brightness(1.07); }
-button.quiet { height: 28px; padding: 0 9px; background: none; color: var(--muted);
+input:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
+button { height: 36px; padding: 0 17px; border: 1px solid transparent; border-radius: 9px;
+         background: var(--btn); color: var(--btn-ink); font: inherit; font-size: 13.5px;
+         font-weight: 560; cursor: pointer; transition: opacity .14s ease, background .14s ease; }
+button:hover { opacity: .86; }
+button.quiet { height: 30px; padding: 0 11px; background: none; color: var(--muted);
                font-weight: 450; font-size: 13px; }
-button.quiet:hover { background: var(--line-soft); color: var(--ink); filter: none; }
-button.quiet.risk:hover { color: var(--bad); }
-.warn { margin: 0 0 12px; padding: 9px 12px; border-radius: 8px; font-size: 13px;
-        color: var(--bad); background: color-mix(in srgb, var(--bad) 9%, transparent); }
+button.quiet:hover { background: var(--line-soft); color: var(--ink); opacity: 1; }
+button.quiet.risk:hover { background: var(--bad-soft); color: var(--bad); }
+.form-foot { display: flex; justify-content: flex-end; margin-top: 18px; padding-top: 16px;
+             border-top: 1px solid var(--line-soft); }
+.warn { margin: 0 0 14px; padding: 10px 13px; border-radius: 10px; font-size: 13px;
+        color: var(--bad); background: var(--bad-soft);
+        border: 1px solid color-mix(in srgb, var(--bad) 24%, transparent); }
 
 /* ---- bars ---- */
-.bars { display: grid; gap: 6px; }
-.bars .b { position: relative; display: grid; grid-template-columns: 1fr auto; gap: 10px;
-           align-items: center; padding: 6px 10px; border-radius: 6px; font-size: 13.5px; }
-.bars .fill { position: absolute; inset: 0 auto 0 0; background: var(--bar); border-radius: 6px; }
+.bars { display: grid; gap: 4px; }
+.bars .b { position: relative; display: grid; grid-template-columns: 1fr auto; gap: 12px;
+           align-items: center; padding: 8px 12px; border-radius: 8px; font-size: 13px; }
+.bars .fill { position: absolute; inset: 0 auto 0 0; border-radius: 8px;
+              background: var(--accent-soft); }
 .bars .b > span { position: relative; }
-.bars .n { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12.5px; }
+.bars .n { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
 
 /* ---- login ---- */
-.login { width: 300px; margin: 16vh auto; }
-.login h1 { margin-bottom: 18px; text-align: center; }
-.login form { display: grid; gap: 14px; }
-.login button { width: 100%; }
+.login { width: 336px; margin: 15vh auto; }
+.login .mark { width: 34px; height: 34px; margin: 0 auto 16px; font-size: 16px; border-radius: 10px; }
+.login h1 { margin-bottom: 20px; font-size: 20px; text-align: center; }
+.login .box { padding: 24px; }
+.login form { display: grid; gap: 16px; }
+
+@media (max-width: 760px) {
+  .shell, .shell.collapsed { grid-template-columns: 1fr; }
+  aside, .shell.collapsed aside { position: static; height: auto; flex-direction: row;
+    align-items: center; gap: 6px; padding: 8px 12px; overflow-x: auto;
+    border-right: 0; border-bottom: 1px solid var(--line); }
+  .side-head { margin: 0; padding: 0; }
+  .brand, .toggle, .group { display: none; }
+  nav { flex-direction: row; gap: 4px; overflow: visible; }
+  .item, .shell.collapsed .item { width: auto; padding: 0 12px; }
+  .item .label, .shell.collapsed .item .label { display: inline; }
+  .side-foot { margin: 0 0 0 auto; padding: 0; }
+  main { padding: 26px 18px 72px; }
+  .head { flex-wrap: wrap; }
+}
 """
 
 ICONS = {
@@ -147,7 +244,7 @@ ICONS = {
     "logout": '<path d="M14 3.5h4A2.5 2.5 0 0 1 20.5 6v12a2.5 2.5 0 0 1-2.5 2.5h-4"/>'
               '<path d="m9.5 16 4-4-4-4"/><path d="M13.5 12H3.5"/>',
     "panel": '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M9.5 4.5v15"/>',
-    "backup": '<rect x="2.5" y="3.5" width="19" height="5" rx="1.5"/>'
+    "data": '<rect x="2.5" y="3.5" width="19" height="5" rx="1.5"/>'
               '<path d="M4.5 8.5v10a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-10"/>'
               '<path d="M10 12.5h4"/>',
 }
@@ -167,6 +264,13 @@ document.addEventListener('submit',e=>{const m=e.target.dataset.confirm;if(m&&!c
 document.addEventListener('click',e=>{if(!e.target.closest('.toggle'))return;
   const s=document.querySelector('.shell');s.classList.toggle('collapsed');
   try{localStorage.setItem('sidebar',s.classList.contains('collapsed')?'1':'0')}catch(_){}});
+document.addEventListener('change',e=>{if(e.target.name!=='scope')return;
+  e.target.closest('form').querySelector('.apps').hidden=e.target.value!=='selected'});
+document.addEventListener('change',e=>{const f=e.target.form;if(!f||!f.format)return;
+  const txt=f.format.value==='txt',on=n=>txt?n==='codes':[...f.include].some(c=>c.checked&&c.value===n);
+  f.querySelector('.include').hidden=txt;
+  f.querySelectorAll('.codes').forEach(x=>x.hidden=!on('codes'));
+  f.querySelectorAll('.uses').forEach(x=>x.hidden=!on('redemptions'))});
 </script>
 """
 
@@ -192,14 +296,14 @@ def sidebar(apps, active: str) -> str:
     )
     group = '<p class="group">Apps</p>' if apps else ""
     return f"""<aside>
-      <div class="side-head"><span class="brand">Redeemer</span>
+      <div class="side-head"><span class="mark">R</span><span class="brand">Redeemer</span>
         <button class="toggle" aria-label="Toggle sidebar">{icon("panel", 18)}</button></div>
       <nav>
         {item("/", icon("overview"), "Overview", "overview")}
         {item("/global", icon("globe"), "Global codes", "global")}
+        {item("/data", icon("data"), "Data", "data")}
         {group}{entries}
         {item("/apps/new", icon("plus"), "New app", "new")}
-        {item("/backup", icon("backup"), "Backup", "backup")}
       </nav>
       <form class="side-foot" method="post" action="/logout">
         <button class="item" title="Sign out">{icon("logout")}
@@ -223,10 +327,11 @@ def login_page(error: str = "") -> str:
         "<!doctype html><html lang=en><meta charset=utf-8>"
         '<meta name=viewport content="width=device-width,initial-scale=1">'
         "<title>Sign in · Redeemer</title><link rel=stylesheet href=/style.css>"
-        f'<div class="login"><h1>Redeemer</h1>{warn(error)}'
+        '<div class="login"><div class="mark">R</div><h1>Redeemer</h1>'
+        f'<div class="box pad">{warn(error)}'
         '<form method="post" action="/login">'
         '<label>Password<input type="password" name="password" autofocus></label>'
-        "<button>Sign in</button></form></div></html>"
+        "<button>Sign in</button></form></div></div></html>"
     )
 
 
@@ -241,8 +346,32 @@ def warn(message: str) -> str:
     return f'<p class="warn">{escape(message)}</p>' if message else ""
 
 
-def facts(*parts: str) -> str:
-    return f'<p class="facts">{" · ".join(p for p in parts if p)}</p>'
+def head(title: str, action: str = "", *, mono: bool = False, sub: str = "") -> str:
+    klass = ' class="mono"' if mono else ""
+    line = f'<p class="sub mono">{escape(sub)}</p>' if sub else ""
+    return f'<div class="head"><div><h1{klass}>{escape(title)}</h1>{line}</div>{action}</div>'
+
+
+def stats(*items: tuple[int, str, str]) -> str:
+    tiles = "".join(
+        f'<div class="stat"><b>{count}</b><span>{escape(one if count == 1 else many)}</span></div>'
+        for count, one, many in items
+    )
+    return f'<div class="stats">{tiles}</div>'
+
+
+def chips(*parts) -> str:
+    """Each part is HTML, or (HTML, modifier class)."""
+    items = "".join(
+        f'<span class="chip {p[1] if isinstance(p, tuple) else ""}">'
+        f'{p[0] if isinstance(p, tuple) else p}</span>'
+        for p in parts if p
+    )
+    return f'<div class="chips">{items}</div>'
+
+
+def lead(text: str) -> str:
+    return f'<p class="lead">{escape(text)}</p>'
 
 
 def section(title: str, body: str, *, link: tuple[str, str] | None = None) -> str:
@@ -287,8 +416,15 @@ def _select(name: str, options: dict, chosen: str) -> str:
     return f'<select name="{name}">{items}</select>'
 
 
+def _spans_apps(row) -> bool:
+    """Quota only means something for a code more than one app can spend."""
+    return bool(row["is_global"]) or "," in (row["app_names"] or "")
+
+
 def _uses(row) -> str:
     limit = "∞" if row["max_uses"] is None else row["max_uses"]
+    if not _spans_apps(row):
+        return f'{row["uses"]} / {limit}'
     if row["quota_mode"] == "per_app":
         return f'{row["uses"]} total · {limit}/app'
     return f'{row["uses"]} / {limit} shared'
@@ -309,8 +445,8 @@ def code_rows(codes, fresh: str = "") -> list[str]:
             f'<td class="num">{_uses(c)}</td>'
             f'<td class="muted">{escape(platform)}</td>'
             f'<td class="muted">{escape(expires)}</td>'
-            f'<td><span class="dot{"" if c["enabled"] else " off"}"></span>'
-            f'{"Active" if c["enabled"] else "Off"}</td>'
+            f'<td><span class="pill{" on" if c["enabled"] else ""}">'
+            f'{"Active" if c["enabled"] else "Off"}</span></td>'
             f'<td class="act"><form method="post" action="/c/{c['id']}/toggle">'
             f'<button class="quiet">{"Disable" if c["enabled"] else "Enable"}</button></form></td>'
             "</tr>"
@@ -349,40 +485,44 @@ def redemption_table(redemptions, *, with_app: bool = False, with_code: bool = T
 
 
 QUOTAS = {"shared": "Shared across apps", "per_app": "Per app"}
+SCOPES = {"selected": "Selected apps", "global": "All apps (including future apps)"}
 
 
 def code_form(action: str, values: dict, apps, default_slug=None) -> str:
     def field(name: str, fallback: str = "") -> str:
         return escape(values.get(name, "") or fallback)
 
-    chosen_scope = values.get("scope", "selected" if default_slug else "global")
-    choices = "".join(
-        f'<label class="check"><input type="checkbox" name="app:{escape(a["slug"])}" value="1" '
-        f'{"checked" if values.get("app:" + a["slug"]) == "1" or (not values and a["slug"] == default_slug) else ""}>'
-        f'{escape(a["name"])}</label>' for a in apps
-    )
+    scope = ""
+    if default_slug is None:
+        chosen = values.get("scope", "global")
+        choices = "".join(
+            f'<label class="check"><input type="checkbox" name="app:{escape(a["slug"])}" value="1"'
+            f'{" checked" if values.get("app:" + a["slug"]) == "1" else ""}>'
+            f'{escape(a["name"])}</label>' for a in apps
+        )
+        scope = (
+            f'<label class="wide">Valid in{_select("scope", SCOPES, chosen)}</label>'
+            f'<fieldset class="apps"{"" if chosen == "selected" else " hidden"}>'
+            f'<legend>Apps</legend>{choices or "Register an app first."}</fieldset>'
+            f'<label>Quota{_select("quota_mode", QUOTAS, values.get("quota_mode", "shared"))}</label>'
+        )
     return f"""<div class="box pad">
-      <form class="fields" method="post" action="{action}">
-        <label>Valid in{_select("scope", {"selected": "Selected apps", "global": "All apps (including future apps)"}, chosen_scope)}</label>
-        <fieldset><legend>Apps (used only for Selected apps)</legend>{choices or "Register an app first."}</fieldset>
-        <label>Quota{_select("quota_mode", QUOTAS, values.get("quota_mode", "shared"))}</label>
-        <label>Code<input name="code" class="mono" placeholder="auto" style="width:8.5em"
-               value="{field("code")}"></label>
-        <label>How many<input name="quantity" type="number" min="1" max="500" style="width:5em"
-               value="{field("quantity", "1")}"></label>
-        <label>Note<input name="note" placeholder="optional" style="width:10em"
-               value="{field("note")}"></label>
-        <label>Max uses<input name="max_uses" type="number" min="1" placeholder="∞"
-               style="width:5.5em" value="{field("max_uses")}"></label>
-        <label>Platform{_select("platforms", PLATFORMS, values.get("platforms", ""))}</label>
-        <label>Expires<input name="expires_at" type="date" value="{field("expires_at")}"></label>
-        <button>Create</button>
+      <form method="post" action="{action}">
+        <div class="grid">
+          {scope}
+          <label>Code<input name="code" class="mono" placeholder="auto"
+                 value="{field("code")}"></label>
+          <label>How many<input name="quantity" type="number" min="1" max="500"
+                 value="{field("quantity", "1")}"></label>
+          <label>Note<input name="note" placeholder="optional" value="{field("note")}"></label>
+          <label>Max uses<input name="max_uses" type="number" min="1" placeholder="∞"
+                 value="{field("max_uses")}"></label>
+          <label>Platform{_select("platforms", PLATFORMS, values.get("platforms", ""))}</label>
+          <label>Expires<input name="expires_at" type="date" value="{field("expires_at")}"></label>
+        </div>
+        <div class="form-foot"><button>Create</button></div>
       </form>
     </div>"""
-
-
-def _plural(count: int, one: str, many: str) -> str:
-    return f"<b>{count}</b> {one if count == 1 else many}"
 
 
 # --- pages -------------------------------------------------------------------
@@ -392,36 +532,82 @@ def dashboard(totals, apps, platforms, countries, redemptions) -> str:
     if not apps:
         return page(
             "Overview", apps, "overview",
-            '<div class="head"><h1>Overview</h1></div>'
-            '<div class="box"><p class="empty">No apps yet. '
-            '<a href="/apps/new" style="color:var(--accent)">Add the first one</a> '
-            "to start issuing codes.</p></div>",
+            head("Overview")
+            + '<div class="box"><p class="empty">No apps yet. '
+              '<a href="/apps/new">Add the first one</a> to start issuing codes.</p></div>',
         )
     return page(
         "Overview", apps, "overview",
-        f"""<div class="head"><h1>Overview</h1></div>
-        {facts(_plural(totals["apps"], "app", "apps"),
-               _plural(totals["active_codes"], "active code", "active codes"),
-               _plural(totals["redemptions"], "redemption", "redemptions"))}
-        <div class="split">{bars(platforms, "Platforms")}
-          {bars(countries, "Countries", flags=True)}</div>
+        f"""{head("Overview")}
+        {stats((totals["apps"], "app", "apps"),
+               (totals["active_codes"], "active code", "active codes"),
+               (totals["redemptions"], "redemption", "redemptions"))}
+        <section><div class="split">{bars(platforms, "Platforms")}
+          {bars(countries, "Countries", flags=True)}</div></section>
         {section("Latest redemptions", redemption_table(redemptions, with_app=True))}""",
     )
 
 
-def backup_page(apps, count: int, latest: str, error: str = "") -> str:
+def export_form(apps, values) -> str:
+    def one(name: str, fallback: str = "") -> str:
+        chosen = values.get(name) or []
+        return chosen[0] if chosen else fallback
+
+    def checks(name: str, options, marked) -> str:
+        return "".join(
+            f'<label class="check"><input type="checkbox" name="{name}" value="{escape(value)}"'
+            f'{" checked" if value in marked else ""}>{escape(label)}</label>'
+            for value, label in options
+        )
+
+    def shown(on: bool) -> str:
+        return "" if on else " hidden"
+
+    fmt = one("format", "csv")
+    scope = one("scope", "all")
+    included = set(values.get("include") or ["codes"])
+    codes = shown(fmt == "txt" or "codes" in included)
+    uses = shown(fmt != "txt" and "redemptions" in included)
+    picked = checks("app", [(a["slug"], a["name"]) for a in apps], set(values.get("app") or []))
+    return f"""<div class="box pad">
+      <form method="get" action="/data/export">
+        <div class="grid">
+          <label>Format{_select("format", FORMATS, fmt)}</label>
+          <label class="codes"{codes}>Code status{_select("status", STATUS, one("status", "all"))}</label>
+          <label class="uses"{uses}>Redeemed from
+            <input type="date" name="from" value="{escape(one("from"))}"></label>
+          <label class="uses"{uses}>Redeemed to
+            <input type="date" name="to" value="{escape(one("to"))}"></label>
+          <label class="check uses"{uses}><input type="checkbox" name="devices" value="1"
+                 {"checked" if not values or one("devices") == "1" else ""}> Device ids</label>
+          <fieldset class="include"{shown(fmt != "txt")}><legend>Include</legend>
+            {checks("include", DATASETS.items(), included)}</fieldset>
+          <label class="wide">Apps{_select("scope", EXPORT_SCOPES, scope)}</label>
+          <fieldset class="apps"{shown(scope == "selected")}><legend>Apps</legend>
+            {picked or "Register an app first."}</fieldset>
+        </div>
+        <div class="form-foot"><button>Export</button></div>
+      </form>
+    </div>"""
+
+
+def data_page(apps, snapshots: int, latest: str, values=None, error="", restore_error="") -> str:
+    backup = f"""<div class="box">
+      <div class="bar"><b>{snapshots}</b>
+        <span class="muted">{"snapshot" if snapshots == 1 else "snapshots"}</span>
+        {f'<span class="faint">{escape(latest)}</span>' if latest else ""}
+        <form method="get" action="/backup.db.gz"><button>Download</button></form></div>
+      <div class="bar">
+        <form method="post" action="/restore" enctype="multipart/form-data"
+              data-confirm="Replace every app, code and redemption with this file?">
+          <input type="file" name="file" accept=".gz,.db" required>
+          <button>Restore</button></form></div>
+    </div>"""
     return page(
-        "Backup", apps, "backup",
-        f"""<div class="head"><h1>Backup</h1>
-          <form method="get" action="/backup.db.gz"><button>Download</button></form></div>
-        {facts(_plural(count, "snapshot", "snapshots") + " on the server" if count else "",
-               f"latest {escape(latest)}" if latest else "")}
-        {section("Restore", f'''<div class="box pad">{warn(error)}
-          <form class="fields" method="post" action="/restore" enctype="multipart/form-data"
-                data-confirm="Replace every app, code and redemption with this file?">
-            <input type="file" name="file" accept=".gz,.db" required>
-            <button>Restore</button>
-          </form></div>''')}""",
+        "Data", apps, "data",
+        head("Data")
+        + section("Export", warn(error) + export_form(apps, values or {}))
+        + section("Backup", warn(restore_error) + backup),
     )
 
 
@@ -429,15 +615,17 @@ def new_app(apps, values=None, error="") -> str:
     values = values or {}
     return page(
         "New app", apps, "new",
-        f"""<div class="head"><h1>New app</h1></div>
-        {facts("The slug is what your app sends in every request. Pick it once; it cannot change.")}
+        f"""{head("New app")}
+        {lead("The slug is what your app sends in every request. Pick it once; it cannot change.")}
         <div class="box pad">{warn(error)}
-          <form class="fields" method="post" action="/apps">
-            <label>Slug<input name="slug" class="mono" placeholder="my-app" required
-                   style="width:14em" value="{escape(values.get("slug", ""))}"></label>
-            <label>Name<input name="name" placeholder="My App" required style="width:14em"
-                   value="{escape(values.get("name", ""))}"></label>
-            <button>Create</button>
+          <form method="post" action="/apps">
+            <div class="grid">
+              <label>Slug<input name="slug" class="mono" placeholder="my-app" required
+                     value="{escape(values.get("slug", ""))}"></label>
+              <label>Name<input name="name" placeholder="My App" required
+                     value="{escape(values.get("name", ""))}"></label>
+            </div>
+            <div class="form-foot"><button>Create</button></div>
           </form>
         </div>""",
     )
@@ -451,18 +639,16 @@ def app_page(app, apps, codes, redemptions, platforms, countries,
     base = f"/a/{slug}" if slug else "/global"
     used = app["redemption_count"] if app else sum(c["uses"] for c in codes)
     if slug:
-        head = f"""<div class="head"><h1>{escape(title)}</h1>
-          <form method="post" action="/a/{escape(slug)}/delete"
+        top = head(
+            title,
+            f'''<form method="post" action="/a/{escape(slug)}/delete"
                 data-confirm="Delete {escape(title)}? Codes shared with other apps will remain.">
-            <button class="quiet risk">Delete app</button></form></div>
-        {facts(f'<span class="mono">{escape(slug)}</span>',
-               _plural(len(codes), "code", "codes"),
-               _plural(used, "redemption", "redemptions"))}"""
+              <button class="quiet risk">Delete app</button></form>''',
+            sub=slug,
+        )
     else:
-        head = ('<div class="head"><h1>Global codes</h1></div>'
-                + facts("Valid in every registered app, including future apps. Quota is shared or per app.",
-                        _plural(len(codes), "code", "codes"),
-                        _plural(used, "redemption", "redemptions")))
+        top = head("Global codes") + lead(
+            "Valid in every registered app, including future apps. Quota is shared or per app.")
     banner = ""
     if fresh_count:
         banner = (f'<p class="fresh-note">{fresh_count} '
@@ -470,12 +656,13 @@ def app_page(app, apps, codes, redemptions, platforms, countries,
                   f'<a href="{base}/codes.csv?batch={escape(fresh)}">Export just these</a></p>')
     return page(
         title, apps, f"app:{slug}" if slug else "global",
-        f"""{head}
+        f"""{top}
+        {stats((len(codes), "code", "codes"), (used, "redemption", "redemptions"))}
         {section("New codes", warn(error) + code_form(base + "/codes", values, apps, slug))}
         {section("Codes", banner + code_table(codes, fresh),
                  link=(base + "/codes.csv", "Export CSV"))}
-        <div class="split">{bars(platforms, "Platforms")}
-          {bars(countries, "Countries", flags=True)}</div>
+        <section><div class="split">{bars(platforms, "Platforms")}
+          {bars(countries, "Countries", flags=True)}</div></section>
         {section("Latest redemptions", redemption_table(redemptions, with_app=not slug))}""",
     )
 
@@ -485,36 +672,36 @@ def code_page(code, apps, redemptions, platforms, countries, app_slugs, app_uses
     scope = "every app (including future apps)" if code["is_global"] else ", ".join(
         f'<a href="/a/{escape(slug)}">{escape(slug)}</a>' for slug in app_slugs
     )
-    limits = [
-        _uses(code),
-        PLATFORMS.get(code["platforms"], "any platform") if code["platforms"] else "any platform",
-        f'expires {escape(code["expires_at"][:10])}' if code["expires_at"] else "",
-        "active" if code["enabled"] else "disabled",
-    ]
+    quota = (f'<label>Quota{_select("quota_mode", QUOTAS, code["quota_mode"])}'
+             '<small class="hint">Changing it keeps all previous uses.</small></label>'
+             ) if _spans_apps(code) else ""
     return page(
         code["code"], apps, f"app:{app_slugs[0]}" if app_slugs else "global",
-        f"""<div class="head"><h1 class="mono">{name}</h1>
-          <form method="post" action="/c/{code['id']}/delete" data-confirm="Delete {name}?">
-            <button class="quiet risk">Delete code</button></form></div>
-        {facts(f"valid in {scope}", *limits)}
+        f"""{head(code["code"], f'''<form method="post" action="/c/{code['id']}/delete"
+              data-confirm="Delete {name}?">
+            <button class="quiet risk">Delete code</button></form>''', mono=True)}
+        {chips(f"valid in {scope}", _uses(code),
+               escape(PLATFORMS.get(code["platforms"], "any platform")
+                      if code["platforms"] else "any platform"),
+               f'expires {escape(code["expires_at"][:10])}' if code["expires_at"] else "",
+               ("Active", "on") if code["enabled"] else ("Off", "off"))}
         {section("Settings", f'''<div class="box pad">
-          <form class="fields" method="post" action="/c/{code['id']}">
-            <label>Note<input name="note" style="width:14em"
-                   value="{escape(code["note"])}"></label>
-            <label>Max uses<input name="max_uses" type="number" min="1" placeholder="∞"
-                   style="width:6em"
-                   value="{code["max_uses"] if code["max_uses"] is not None else ""}"></label>
-            <label>Quota{_select("quota_mode", QUOTAS, code["quota_mode"])}</label>
-            <span class="muted">Changing the quota keeps all previous uses.</span>
-            <label>Platform{_select("platforms", PLATFORMS, code["platforms"] or "")}</label>
-            <label>Expires<input name="expires_at" type="date"
-                   value="{escape((code["expires_at"] or "")[:10])}"></label>
-            <label class="check"><input name="enabled" type="checkbox" value="1"
-                   {"checked" if code["enabled"] else ""}> Enabled</label>
-            <button>Save</button>
+          <form method="post" action="/c/{code['id']}">
+            <div class="grid">
+              <label>Note<input name="note" value="{escape(code["note"])}"></label>
+              <label>Max uses<input name="max_uses" type="number" min="1" placeholder="∞"
+                     value="{code["max_uses"] if code["max_uses"] is not None else ""}"></label>
+              {quota}
+              <label>Platform{_select("platforms", PLATFORMS, code["platforms"] or "")}</label>
+              <label>Expires<input name="expires_at" type="date"
+                     value="{escape((code["expires_at"] or "")[:10])}"></label>
+              <label class="check"><input name="enabled" type="checkbox" value="1"
+                     {"checked" if code["enabled"] else ""}> Enabled</label>
+            </div>
+            <div class="form-foot"><button>Save</button></div>
           </form></div>''')}
-        <div class="split">{bars(platforms, "Platforms")}
-          {bars(countries, "Countries", flags=True)}</div>
+        <section><div class="split">{bars(platforms, "Platforms")}
+          {bars(countries, "Countries", flags=True)}</div></section>
         {bars(app_uses, "Uses by app")}
         {section("Redemptions",
                  redemption_table(redemptions, with_app=True, with_code=False))}""",

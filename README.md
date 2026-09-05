@@ -37,6 +37,8 @@ some away.
   and across the global codes.
 - Two modes: identified by a device UUID, or fully anonymous.
 - Redeeming twice never spends a second use.
+- Export codes, redemptions and apps as CSV, JSON or a plain code list, filtered by app,
+  code status and redemption date.
 - Daily compressed backups, taken by the server itself, downloadable and restorable from
   the panel.
 
@@ -129,7 +131,7 @@ compressed snapshot daily and keeps the last `REDEEMER_BACKUP_KEEP`. A snapshot 
 docker compose exec redeemer python -m redeemer backup
 ```
 
-The **Backup** page downloads a snapshot and restores one, compressed or plain. Restoring
+The **Data** page downloads a snapshot and restores one, compressed or plain. Restoring
 replaces every app, code and redemption, and snapshots the current state first. Snapshots sit on
 the same volume as the database, so a downloaded copy is what survives losing the host.
 

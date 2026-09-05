@@ -179,6 +179,24 @@ class HttpTest(unittest.TestCase):
         csv, _ = self.request("GET", "/a/nope/codes.csv", headers={"Cookie": headers["Cookie"]})
         self.assertEqual([missing_app.status, missing_code.status, csv.status], [404, 404, 404])
 
+    def test_form_keeps_values_when_it_fails(self):
+        headers = {"Cookie": self.login(), "Content-Type": "application/x-www-form-urlencoded"}
+        conn = HTTPConnection("127.0.0.1", self.port, timeout=5)
+        conn.request("POST", "/apps", "slug=Bad Slug&name=Keep Me", headers)
+        response = conn.getresponse()
+        body = response.read()
+        conn.close()
+        self.assertEqual(response.status, 400)
+        self.assertIn(b"Keep Me", body)
+        self.assertIn(b"Bad Slug", body)
+
+    def test_platform_scoped_code_over_http(self):
+        self.server.db.add_code("IOSONLY", "99arcade", platforms="ios")
+        ok = self.redeem(app="99arcade", code="IOSONLY", device_id="d1", platform="ios")
+        no = self.redeem(app="99arcade", code="IOSONLY", device_id="d2", platform="android")
+        self.assertTrue(ok[1]["granted"])
+        self.assertEqual(no[1]["reason"], "wrong_platform")
+
     def test_healthz(self):
         response, data = self.request("GET", "/healthz")
         self.assertEqual((response.status, json.loads(data)), (200, {"ok": True}))

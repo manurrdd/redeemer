@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS codes (
     note       TEXT NOT NULL DEFAULT '',
     max_uses   INTEGER,
     expires_at TEXT,
+    platforms  TEXT,
     enabled    INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL
 );
@@ -52,13 +53,21 @@ ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
 DEVICE = re.compile(r"^[\x21-\x7e]{1,128}$")
 NONCE = DEVICE
-SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{1,31}$")
+SLUG = re.compile(r"^[a-z0-9][a-z0-9.-]{1,63}$")
 CODE = re.compile(r"^[A-Z0-9-]{4,32}$")
 PLATFORM = re.compile(r"^[a-z0-9_.-]{1,16}$")
 VERSION = re.compile(r"^[A-Za-z0-9_.+-]{1,32}$")
 COUNTRY = re.compile(r"^[A-Z]{2}$")
 
 BREAKDOWN_FIELDS = ("platform", "country", "app_version")
+
+# What a code may be restricted to. None means any platform, including ones not listed here.
+PLATFORM_SCOPES = {
+    "": None,
+    "ios": ("ios",),
+    "android": ("android",),
+    "ios,android": ("ios", "android"),
+}
 
 
 def utcnow() -> str:
@@ -130,7 +139,7 @@ class Database:
     def add_app(self, slug: str, name: str) -> str:
         slug = (slug or "").strip().lower()
         if not SLUG.match(slug):
-            raise ValueError("Slug must be 2-32 chars: lowercase letters, digits and dashes.")
+            raise ValueError("Slug must be 2-64 chars: lowercase letters, digits, dots and dashes.")
         if self.app(slug) is not None:
             raise ValueError(f"App '{slug}' already exists.")
         self.conn.execute(
@@ -178,6 +187,7 @@ class Database:
         note: str = "",
         max_uses: int | None = None,
         expires_at: str | None = None,
+        platforms: str | None = None,
     ) -> str:
         code = normalize_code(code)
         if not CODE.match(code):
@@ -186,12 +196,16 @@ class Database:
             raise ValueError("Unknown app.")
         if self.conn.execute("SELECT 1 FROM codes WHERE code = ?", (code,)).fetchone():
             raise ValueError(f"Code '{code}' already exists.")
+        if (platforms or "") not in PLATFORM_SCOPES:
+            raise ValueError("Unknown platform scope.")
         self.conn.execute(
             """
-            INSERT INTO codes (code, app_slug, note, max_uses, expires_at, enabled, created_at)
-            VALUES (?, ?, ?, ?, ?, 1, ?)
+            INSERT INTO codes (code, app_slug, note, max_uses, expires_at, platforms,
+                               enabled, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, 1, ?)
             """,
-            (code, app_slug, note.strip(), max_uses, expires_at or None, utcnow()),
+            (code, app_slug, note.strip(), max_uses, expires_at or None,
+             platforms or None, utcnow()),
         )
         return code
 
@@ -202,11 +216,18 @@ class Database:
         note: str,
         max_uses: int | None,
         expires_at: str | None,
+        platforms: str | None,
         enabled: bool,
     ) -> None:
+        if (platforms or "") not in PLATFORM_SCOPES:
+            raise ValueError("Unknown platform scope.")
         self.conn.execute(
-            "UPDATE codes SET note = ?, max_uses = ?, expires_at = ?, enabled = ? WHERE code = ?",
-            (note.strip(), max_uses, expires_at or None, 1 if enabled else 0, code),
+            """
+            UPDATE codes SET note = ?, max_uses = ?, expires_at = ?, platforms = ?, enabled = ?
+             WHERE code = ?
+            """,
+            (note.strip(), max_uses, expires_at or None, platforms or None,
+             1 if enabled else 0, code),
         )
 
     def set_enabled(self, code: str, enabled: bool) -> None:
@@ -296,6 +317,10 @@ class Database:
                 return False, "unknown"
             if row["app_slug"] is not None and row["app_slug"] != app_slug:
                 return False, "wrong_app"
+            # A platform-scoped code cannot be granted to a request that did not say which
+            # platform it came from: there would be nothing to check it against.
+            if row["platforms"] and platform not in row["platforms"].split(","):
+                return False, "wrong_platform"
             if not row["enabled"]:
                 return False, "disabled"
             if row["expires_at"] and utcnow() > row["expires_at"]:

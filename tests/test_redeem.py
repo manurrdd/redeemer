@@ -170,3 +170,46 @@ class AnonymousTest(unittest.TestCase):
         self.db.redeem("99arcade", "FREE99")
         self.db.redeem("99arcade", "FREE99", "device-a")
         self.assertEqual(self.db.totals()["devices"], 1)
+
+
+class PlatformScopeTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db = Database(Path(self.tmp.name) / "test.db")
+        self.db.add_app("99arcade", "99 Arcade")
+
+    def tearDown(self) -> None:
+        self.db.close()
+        self.tmp.cleanup()
+
+    def test_scoped_code_accepts_only_its_platform(self):
+        self.db.add_code("IOSONLY", "99arcade", platforms="ios")
+        self.assertEqual(self.db.redeem("99arcade", "IOSONLY", "d1", platform="ios"), (True, "ok"))
+        self.assertEqual(
+            self.db.redeem("99arcade", "IOSONLY", "d2", platform="android"),
+            (False, "wrong_platform"),
+        )
+
+    def test_two_platforms(self):
+        self.db.add_code("MOBILE", "99arcade", platforms="ios,android")
+        self.assertTrue(self.db.redeem("99arcade", "MOBILE", "d1", platform="android")[0])
+        self.assertEqual(
+            self.db.redeem("99arcade", "MOBILE", "d2", platform="macos"),
+            (False, "wrong_platform"),
+        )
+
+    def test_scoped_code_needs_a_platform(self):
+        self.db.add_code("IOSONLY", "99arcade", platforms="ios")
+        self.assertEqual(self.db.redeem("99arcade", "IOSONLY", "d1"), (False, "wrong_platform"))
+
+    def test_unscoped_code_takes_anything(self):
+        self.db.add_code("ANYWHERE", "99arcade")
+        self.assertTrue(self.db.redeem("99arcade", "ANYWHERE", "d1")[0])
+        self.assertTrue(self.db.redeem("99arcade", "ANYWHERE", "d2", platform="web")[0])
+
+    def test_unknown_scope_is_rejected(self):
+        with self.assertRaises(ValueError):
+            self.db.add_code("NOPE1", "99arcade", platforms="windows")
+
+    def test_slug_allows_dots(self):
+        self.assertEqual(self.db.add_app("com.manu.arcade", "Arcade"), "com.manu.arcade")

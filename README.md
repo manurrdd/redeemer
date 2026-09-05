@@ -25,7 +25,8 @@ some away.
 ## Features
 
 - Apps, codes and redemptions in one panel; light and dark.
-- Codes with a note, a usage limit, an expiry date and an on/off switch.
+- Codes with a note, a usage limit, an expiry date, an on/off switch and an optional
+  platform restriction (iOS, Android or both).
 - Generate codes in batches, or set your own. Export to CSV.
 - Global codes valid in every registered app.
 - Redemption log with platform, app version, country and device, plus per-app breakdowns.

@@ -2,9 +2,11 @@
 
 ## 1. Register the app
 
-In the panel, **Add app** with a stable lowercase slug (`my-app`). It travels in every request
-and should never change: redemptions already recorded hang off it. A request from an unregistered
-slug is rejected with `unknown_app`.
+In the panel, **Add app** with a stable lowercase slug: 2 to 64 characters of letters, digits,
+dots and dashes, so a bundle id like `com.acme.myapp` works as well as `my-app`. It is yours to
+choose and matches nothing in the stores — the only rule is that the app sends this exact string
+in `app`, and that it never changes: redemptions already recorded hang off it. A request from an
+unregistered slug is rejected with `unknown_app`.
 
 ## 2. Choose a mode
 
@@ -65,6 +67,7 @@ dropped rather than rejected.
 |---|---|
 | `device_id` / `nonce` | up to 128 printable characters, no spaces |
 | `platform` | up to 16 chars, `a-z 0-9 _ . -` — e.g. `ios`, `android`, `macos` |
+| | required if you restrict codes by platform, see below |
 | `app_version` | up to 32 chars, `A-Z a-z 0-9 _ . + -` |
 | `country` | ISO 3166-1 alpha-2, e.g. `ES`. Take it from the device region |
 
@@ -85,6 +88,7 @@ The response is always `200` unless the request itself is malformed:
 | `already` | Already redeemed by this device, or a retry of this nonce | Grant and store |
 | `unknown` | No such code | Show "invalid code" |
 | `wrong_app` | Belongs to another app | Show "invalid code" |
+| `wrong_platform` | Restricted to another platform | Show "invalid code" |
 | `disabled` | Switched off in the panel | Show "invalid code" |
 | `expired` | Past its expiry date | Show "invalid code" |
 | `exhausted` | Out of uses | Show "invalid code" |
@@ -94,6 +98,15 @@ The response is always `200` unless the request itself is malformed:
 
 `granted` is true for both `ok` and `already`. The app only needs to read `granted`; `reason`
 distinguishes the error message and helps when debugging.
+
+### Platform-restricted codes
+
+A code can be limited to iOS, to Android, or to both, from the panel. The check runs against the
+`platform` the request carries, so a restricted code is rejected with `wrong_platform` when the
+app sends nothing to check against. If you use them, send `platform` always.
+
+Unrestricted codes ignore the field and work everywhere, including platforms the panel does not
+list.
 
 ## 4. Store the grant
 

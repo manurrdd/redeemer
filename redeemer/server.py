@@ -216,19 +216,9 @@ class Handler(BaseHTTPRequestHandler):
         if not self.authenticated():
             return self.redirect("/login")
         if path == "/":
-            return self.html(
-                views.dashboard(
-                    self.db.totals(),
-                    self.db.apps(),
-                    self.db.breakdown("platform"),
-                    self.db.breakdown("country"),
-                    self.db.redemptions(limit=25),
-                )
-            )
+            return self.html(self.render_dashboard())
         if path == "/global":
-            return self.html(
-                views.app_page(None, self.db.codes(None), self.db.redemptions(limit=25), [], [])
-            )
+            return self.html(self.render_app(None, None))
         if path == "/global/codes.csv":
             return self.codes_csv(None)
         if path.startswith("/a/") and path.endswith("/codes.csv"):
@@ -236,23 +226,16 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/a/"):
             app = self.db.app(path[3:])
             if app is None:
-                return self.html(views.not_found(), 404)
-            slug = app["slug"]
-            return self.html(
-                views.app_page(
-                    app,
-                    self.db.codes(slug),
-                    self.db.redemptions(app_slug=slug, limit=25),
-                    self.db.breakdown("platform", app_slug=slug),
-                    self.db.breakdown("country", app_slug=slug),
-                )
-            )
+                return self.html(views.not_found(self.db.apps()), 404)
+            return self.html(self.render_app(app, app["slug"]))
         if path.startswith("/c/"):
             code = self.db.code(path[3:])
             if code is None:
-                return self.html(views.not_found(), 404)
-            return self.html(views.code_page(code, self.db.redemptions(code=code["code"])))
-        return self.html(views.not_found(), 404)
+                return self.html(views.not_found(self.db.apps()), 404)
+            return self.html(
+                views.code_page(code, self.db.apps(), self.db.redemptions(code=code["code"]))
+            )
+        return self.html(views.not_found(self.db.apps()), 404)
 
     do_HEAD = do_GET
 
@@ -280,18 +263,18 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/c/") and path.endswith("/delete"):
             code = self.db.code(path[3:-7])
             if code is None:
-                return self.html(views.not_found(), 404)
+                return self.html(views.not_found(self.db.apps()), 404)
             self.db.delete_code(code["code"])
             return self.redirect(f"/a/{code['app_slug']}" if code["app_slug"] else "/global")
         if path.startswith("/c/") and path.endswith("/toggle"):
             code = self.db.code(path[3:-7])
             if code is None:
-                return self.html(views.not_found(), 404)
+                return self.html(views.not_found(self.db.apps()), 404)
             self.db.set_enabled(code["code"], not code["enabled"])
             return self.redirect(self.back())
         if path.startswith("/c/"):
             return self.update_code(normalize_code(path[3:]))
-        return self.html(views.not_found(), 404)
+        return self.html(views.not_found(self.db.apps()), 404)
 
     # --- api ----------------------------------------------------------------
 
@@ -368,56 +351,63 @@ class Handler(BaseHTTPRequestHandler):
         try:
             slug = self.db.add_app(data.get("slug", ""), data.get("name", ""))
         except ValueError as error:
-            return self.html(
-                views.dashboard(
-                    self.db.totals(),
-                    self.db.apps(),
-                    self.db.breakdown("platform"),
-                    self.db.breakdown("country"),
-                    self.db.redemptions(limit=25),
-                    str(error),
-                ),
-                400,
-            )
+            return self.html(self.render_dashboard(data, str(error)), 400)
         return self.redirect(f"/a/{slug}")
 
     def create_codes(self, app_slug: str | None) -> None:
         if app_slug is not None and self.db.app(app_slug) is None:
-            return self.html(views.not_found(), 404)
+            return self.html(views.not_found(self.db.apps()), 404)
         data = self.form()
         target = f"/a/{app_slug}" if app_slug else "/global"
         quantity = min(500, self.number(data.get("quantity"), 1))
         custom = normalize_code(data.get("code", ""))
-        max_uses = self.number(data.get("max_uses"))
-        expires = data.get("expires_at") or None
-        if expires:
-            expires = f"{expires}T23:59:59Z"
+        options = {
+            "note": data.get("note", ""),
+            "max_uses": self.number(data.get("max_uses")),
+            "expires_at": self.expiry(data.get("expires_at")),
+            "platforms": data.get("platforms", ""),
+        }
         try:
-            if custom:
-                self.db.add_code(custom, app_slug, note=data.get("note", ""),
-                                 max_uses=max_uses, expires_at=expires)
-            else:
-                for _ in range(quantity):
-                    self.db.add_code(generate_code(), app_slug, note=data.get("note", ""),
-                                     max_uses=max_uses, expires_at=expires)
+            for _ in range(1 if custom else quantity):
+                self.db.add_code(custom or generate_code(), app_slug, **options)
         except ValueError as error:
             app = self.db.app(app_slug) if app_slug else None
-            return self.html(self.render_app(app, app_slug, str(error)), 400)
+            return self.html(self.render_app(app, app_slug, data, str(error)), 400)
         return self.redirect(target)
 
-    def render_app(self, app, app_slug: str | None, error: str = "") -> str:
+    @staticmethod
+    def expiry(value: str | None) -> str | None:
+        """A date input gives a day; a code lives until the end of it."""
+        return f"{value}T23:59:59Z" if value else None
+
+    def render_dashboard(self, values=None, error: str = "") -> str:
+        return views.dashboard(
+            self.db.totals(),
+            self.db.apps(),
+            self.db.breakdown("platform"),
+            self.db.breakdown("country"),
+            self.db.redemptions(limit=25),
+            values,
+            error,
+        )
+
+    def render_app(self, app, app_slug: str | None, values=None, error: str = "") -> str:
         return views.app_page(
             app,
+            self.db.apps(),
             self.db.codes(app_slug),
-            self.db.redemptions(app_slug=app_slug, limit=25) if app_slug else self.db.redemptions(limit=25),
+            self.db.redemptions(app_slug=app_slug, limit=25)
+            if app_slug
+            else self.db.redemptions(limit=25),
             self.db.breakdown("platform", app_slug=app_slug) if app_slug else [],
             self.db.breakdown("country", app_slug=app_slug) if app_slug else [],
+            values,
             error,
         )
 
     def codes_csv(self, app_slug: str | None) -> None:
         if app_slug is not None and self.db.app(app_slug) is None:
-            return self.html(views.not_found(), 404)
+            return self.html(views.not_found(self.db.apps()), 404)
         rows = ["code,note,uses,max_uses,expires_at,enabled"]
         for c in self.db.codes(app_slug):
             note = c["note"].replace('"', '""')
@@ -435,18 +425,19 @@ class Handler(BaseHTTPRequestHandler):
 
     def update_code(self, code: str) -> None:
         if self.db.code(code) is None:
-            return self.html(views.not_found(), 404)
+            return self.html(views.not_found(self.db.apps()), 404)
         data = self.form()
-        expires = data.get("expires_at") or None
-        if expires:
-            expires = f"{expires}T23:59:59Z"
-        self.db.update_code(
-            code,
-            note=data.get("note", ""),
-            max_uses=self.number(data.get("max_uses")),
-            expires_at=expires,
-            enabled=data.get("enabled") == "1",
-        )
+        try:
+            self.db.update_code(
+                code,
+                note=data.get("note", ""),
+                max_uses=self.number(data.get("max_uses")),
+                expires_at=self.expiry(data.get("expires_at")),
+                platforms=data.get("platforms", ""),
+                enabled=data.get("enabled") == "1",
+            )
+        except ValueError:
+            return self.html(views.not_found(self.db.apps()), 400)
         return self.redirect(f"/c/{code}")
 
 

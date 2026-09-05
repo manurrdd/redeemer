@@ -1,0 +1,21 @@
+# Dokploy routes through its own network and terminates TLS itself, so this variant drops
+# the published port and joins dokploy-network. Point the service's Compose Path at it.
+services:
+  redeemer:
+    build: .
+    restart: unless-stopped
+    environment:
+      REDEEMER_ADMIN_PASSWORD: ${REDEEMER_ADMIN_PASSWORD:?set it in the service environment}
+    volumes:
+      - redeemer-data:/data
+    expose:
+      - "8787"
+    networks:
+      - dokploy-network
+
+volumes:
+  redeemer-data:
+
+networks:
+  dokploy-network:
+    external: true

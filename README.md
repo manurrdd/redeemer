@@ -45,18 +45,10 @@ published app at it.
 
 ### Dokploy
 
-Create a **Compose** service from your fork, set `REDEEMER_ADMIN_PASSWORD` under Environment,
-and add the domain pointing at service `redeemer`, port `8787`. Dokploy routes through its own
-network, so add this to the compose file and drop the `ports` block:
-
-```yaml
-services:
-  redeemer:
-    networks: [dokploy-network]
-networks:
-  dokploy-network:
-    external: true
-```
+Create a **Compose** service from the repository, set **Compose Path** to
+`./docker-compose.dokploy.yml`, add `REDEEMER_ADMIN_PASSWORD` under Environment, and point a
+domain at service `redeemer`, port `8787`. That file is the same stack without a published port,
+joined to `dokploy-network` so Traefik can route to it and issue the certificate.
 
 ### Without Docker
 

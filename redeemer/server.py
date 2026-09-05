@@ -208,7 +208,10 @@ class Handler(BaseHTTPRequestHandler):
         self._body = None
         path = urlparse(self.path).path
         if path == "/style.css":
-            return self.send(200, views.CSS.encode(), "text/css; charset=utf-8")
+            # Revalidate: the stylesheet ships inside the binary and changes with upgrades,
+            # so a cached copy would outlive the version it belongs to.
+            return self.send(200, views.CSS.encode(), "text/css; charset=utf-8",
+                             [("Cache-Control", "no-cache")])
         if path == "/healthz":
             return self.json({"ok": True})
         if path == "/login":
@@ -217,6 +220,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.redirect("/login")
         if path == "/":
             return self.html(self.render_dashboard())
+        if path == "/apps/new":
+            return self.html(views.new_app(self.db.apps()))
         if path == "/global":
             return self.html(self.render_app(None, None))
         if path == "/global/codes.csv":
@@ -351,7 +356,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             slug = self.db.add_app(data.get("slug", ""), data.get("name", ""))
         except ValueError as error:
-            return self.html(self.render_dashboard(data, str(error)), 400)
+            return self.html(views.new_app(self.db.apps(), data, str(error)), 400)
         return self.redirect(f"/a/{slug}")
 
     def create_codes(self, app_slug: str | None) -> None:
@@ -380,15 +385,13 @@ class Handler(BaseHTTPRequestHandler):
         """A date input gives a day; a code lives until the end of it."""
         return f"{value}T23:59:59Z" if value else None
 
-    def render_dashboard(self, values=None, error: str = "") -> str:
+    def render_dashboard(self) -> str:
         return views.dashboard(
             self.db.totals(),
             self.db.apps(),
             self.db.breakdown("platform"),
             self.db.breakdown("country"),
             self.db.redemptions(limit=25),
-            values,
-            error,
         )
 
     def render_app(self, app, app_slug: str | None, values=None, error: str = "") -> str:

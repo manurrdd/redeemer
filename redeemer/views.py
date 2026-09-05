@@ -5,162 +5,162 @@ from html import escape
 CSS = """
 :root {
   color-scheme: light dark;
-  --bg: #f4f5f7; --panel: #fff; --side: #fbfbfc; --line: #e4e6eb; --ink: #14161a;
-  --muted: #6b7280; --faint: #9aa1ad; --accent: #3b5bdb; --accent-soft: #eaeeff;
-  --ok: #16794a; --bad: #c0392b; --bar: #ccd6fb; --shadow: 0 1px 2px rgba(16,18,24,.05);
-  --radius: 12px; --side-w: 236px;
+  --bg: #fff; --side: #fafafa; --line: #e8e9ec; --line-soft: #f1f2f4;
+  --ink: #16181d; --muted: #62697a; --faint: #9aa0ad;
+  --accent: #3d5afe; --accent-soft: #eef1ff;
+  --ok: #15803d; --bad: #dc2626; --bar: #dfe4fd;
 }
 @media (prefers-color-scheme: dark) {
-  :root { --bg: #0e1014; --panel: #171a20; --side: #12141a; --line: #262a33; --ink: #e9ecf1;
-          --muted: #98a0ac; --faint: #6c7480; --accent: #7590ff; --accent-soft: #1c2340;
-          --ok: #4ade80; --bad: #f87171; --bar: #2b3557; --shadow: none; }
+  :root { --bg: #0f1115; --side: #14161b; --line: #24272f; --line-soft: #1b1e24;
+          --ink: #e8eaee; --muted: #9199a8; --faint: #6a7180;
+          --accent: #7d94ff; --accent-soft: #1a1f38; --ok: #4ade80; --bad: #f87171;
+          --bar: #232a45; }
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--ink);
-       font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+       font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
        -webkit-font-smoothing: antialiased; }
 a { color: inherit; text-decoration: none; }
-main a:not(.item) { color: var(--accent); }
-main a:not(.item):hover { text-decoration: underline; }
-
-/* shell */
-.shell { display: grid; grid-template-columns: var(--side-w) 1fr; min-height: 100vh; }
-.shell.collapsed { --side-w: 68px; }
-aside { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column;
-        gap: 4px; padding: 14px 12px; background: var(--side);
-        border-right: 1px solid var(--line); overflow: hidden; }
-.side-head { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 8px 0 10px;
-             margin-bottom: 10px; }
-.brand { font-weight: 650; letter-spacing: -.02em; font-size: 16px; white-space: nowrap; }
-.collapse { margin-left: auto; display: grid; place-items: center; width: 30px; height: 30px;
-            border: 0; border-radius: 8px; background: transparent; color: var(--faint);
-            cursor: pointer; flex: none; }
-.collapse:hover { background: var(--line); color: var(--ink); }
-.shell.collapsed .brand { display: none; }
-.shell.collapsed .side-head { padding: 0; justify-content: center; }
-.shell.collapsed .collapse { margin: 0; }
-nav { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
-.item { flex: none; display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 9px;
-        color: var(--muted); font-size: 14px; white-space: nowrap; border: 0;
-        background: transparent; font-family: inherit; width: 100%; cursor: pointer; }
-.item svg { flex: none; }
-.avatar { flex: none; display: grid; place-items: center; width: 18px; height: 18px;
-          border-radius: 5px; background: var(--line); color: var(--muted); font-size: 9.5px;
-          font-weight: 700; letter-spacing: .02em; }
-.item.on .avatar { background: var(--accent); color: #fff; }
-.item:hover { background: var(--line); color: var(--ink); }
-.item.on { background: var(--accent-soft); color: var(--accent); font-weight: 550; }
-.side-label { flex: none; margin: 16px 10px 6px; font-size: 11px; text-transform: uppercase;
-              letter-spacing: .09em; color: var(--faint); font-weight: 600; }
-.side-foot { margin-top: auto; padding-top: 8px; }
-.shell.collapsed .item { justify-content: center; padding: 9px 0; }
-.shell.collapsed .item .label, .shell.collapsed .side-label { display: none; }
-.shell.collapsed .side-label { display: block; height: 1px; margin: 12px 12px; padding: 0;
-                               background: var(--line); overflow: hidden; }
-
-/* content */
-main { padding: 30px 32px 72px; min-width: 0; }
-.wrap { max-width: 940px; margin: 0 auto; }
-h1 { font-size: 24px; margin: 0; letter-spacing: -.025em; }
-h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--faint);
-     margin: 30px 0 10px; font-weight: 600; }
-.page-head { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 22px; }
-.page-head form { margin-left: auto; }
-.sub { color: var(--muted); margin: 5px 0 0; font-size: 13px; }
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
-        box-shadow: var(--shadow); }
-.card.pad { padding: 18px; }
-.card + .card { margin-top: 12px; }
-.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; }
-.stat { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
-        box-shadow: var(--shadow); padding: 15px 17px; }
-.stat b { display: block; font-size: 25px; font-weight: 620; letter-spacing: -.03em;
-          font-variant-numeric: tabular-nums; line-height: 1.2; }
-.stat span { color: var(--faint); font-size: 11px; text-transform: uppercase;
-             letter-spacing: .07em; font-weight: 600; }
-.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-@media (max-width: 820px) { .grid2 { grid-template-columns: 1fr; } }
-
-/* tables */
-.scroll { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-th { text-align: left; font-size: 11px; font-weight: 600; color: var(--faint);
-     text-transform: uppercase; letter-spacing: .06em; padding: 13px 14px; white-space: nowrap;
-     border-bottom: 1px solid var(--line); }
-td { padding: 11px 14px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-tbody tr:last-child td { border-bottom: 0; }
-tbody tr:hover { background: color-mix(in srgb, var(--line) 40%, transparent); }
-td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .muted { color: var(--muted); }
 .faint { color: var(--faint); }
-.empty { color: var(--faint); padding: 26px 14px; text-align: center; font-size: 14px; }
-.pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px;
-        border: 1px solid var(--line); color: var(--muted); }
-.pill.on { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
-.pill.off { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, transparent); }
-.row-actions { display: flex; gap: 4px; justify-content: flex-end; }
 
-/* forms */
-form.fields { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
-label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted);
-        font-weight: 500; }
-label.check { flex-direction: row; align-items: center; gap: 8px; padding-bottom: 11px; }
-input, select { padding: 9px 11px; border: 1px solid var(--line); border-radius: 9px;
-                background: var(--bg); color: var(--ink); font: inherit; font-size: 14px; }
+/* ---- shell ---- */
+.shell { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+.shell.collapsed { grid-template-columns: 56px 1fr; }
+aside { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column;
+        gap: 2px; padding: 10px; background: var(--side);
+        border-right: 1px solid var(--line); }
+.shell.collapsed aside { padding: 10px 8px; }
+.side-head { display: flex; align-items: center; height: 40px; margin-bottom: 6px; }
+.brand { flex: 1; padding-left: 10px; font-size: 15px; font-weight: 650; letter-spacing: -.01em; }
+.toggle { flex: none; width: 32px; height: 32px; display: grid; place-items: center; border: 0;
+          border-radius: 8px; background: transparent; color: var(--faint); cursor: pointer;
+          padding: 0; }
+.toggle:hover { background: var(--line); color: var(--ink); }
+.shell.collapsed .brand { display: none; }
+.shell.collapsed .side-head { justify-content: center; }
+
+nav { display: flex; flex-direction: column; gap: 2px; min-height: 0;
+      overflow: hidden auto; }
+.item { flex: none; height: 36px; display: flex; align-items: center; gap: 10px; padding: 0 10px;
+        border-radius: 8px; color: var(--muted); font-size: 14px; white-space: nowrap;
+        border: 0; background: none; font-family: inherit; cursor: pointer; width: 100%; }
+.item:hover { background: var(--line-soft); color: var(--ink); }
+.item.on { background: var(--accent-soft); color: var(--accent); font-weight: 550; }
+.item svg, .item .avatar { flex: none; }
+.avatar { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 5px;
+          background: var(--line); color: var(--muted); font-size: 9px; font-weight: 700; }
+.item.on .avatar { background: var(--accent); color: #fff; }
+.item .label { overflow: hidden; text-overflow: ellipsis; }
+.shell.collapsed .item { padding: 0; justify-content: center; }
+.shell.collapsed .item .label, .shell.collapsed .group { display: none; }
+.group { flex: none; margin: 14px 10px 4px; font-size: 11px; font-weight: 600; color: var(--faint);
+         letter-spacing: .04em; }
+.side-foot { flex: none; margin-top: auto; padding-top: 6px; }
+
+/* ---- page ---- */
+main { padding: 34px 36px 80px; min-width: 0; }
+.wrap { max-width: 900px; margin: 0 auto; }
+.head { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 6px; }
+.head form { margin-left: auto; }
+h1 { margin: 0; font-size: 21px; font-weight: 620; letter-spacing: -.02em; }
+h1.mono { font-size: 20px; letter-spacing: 0; }
+.facts { margin: 0 0 26px; color: var(--muted); font-size: 13px; }
+.facts b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+section { margin-top: 30px; }
+.title { display: flex; align-items: baseline; gap: 10px; margin: 0 0 10px; font-size: 13px;
+         font-weight: 600; }
+.title a { color: var(--accent); font-weight: 500; font-size: 12.5px; }
+.box { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.box.pad { padding: 14px; }
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 800px) { .split { grid-template-columns: 1fr; } }
+
+/* ---- tables ---- */
+.scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-size: 12px; font-weight: 550; color: var(--faint); padding: 9px 14px;
+     white-space: nowrap; background: var(--side); border-bottom: 1px solid var(--line); }
+td { padding: 10px 14px; border-top: 1px solid var(--line-soft); white-space: nowrap; }
+tbody tr:first-child td { border-top: 0; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+td.act { text-align: right; padding: 6px 8px; }
+.code-link { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13.5px;
+             font-weight: 550; }
+.code-link:hover { color: var(--accent); }
+.empty { padding: 34px 16px; text-align: center; color: var(--faint); font-size: 13.5px; }
+.dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 7px;
+       vertical-align: 1px; background: var(--ok); }
+.dot.off { background: var(--faint); }
+
+/* ---- forms ---- */
+.fields { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--muted); }
+label.check { flex-direction: row; align-items: center; gap: 7px; height: 34px; }
+input, select { height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 7px;
+                background: var(--bg); color: var(--ink); font: inherit; font-size: 13.5px; }
+input[type=date] { padding-right: 6px; }
 input::placeholder { color: var(--faint); }
-input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px;
-                            border-color: transparent; }
-button { padding: 10px 18px; border: 1px solid transparent; border-radius: 9px;
-         background: var(--accent); color: #fff; font: inherit; font-size: 14px; font-weight: 550;
+input:focus, select:focus { outline: none; border-color: var(--accent);
+                            box-shadow: 0 0 0 3px var(--accent-soft); }
+button { height: 34px; padding: 0 15px; border: 1px solid transparent; border-radius: 7px;
+         background: var(--accent); color: #fff; font: inherit; font-size: 13.5px; font-weight: 550;
          cursor: pointer; }
-button:hover { filter: brightness(1.08); }
-button.ghost { background: transparent; color: var(--ink); border-color: var(--line); }
-button.link { background: none; border: 0; color: var(--muted); padding: 3px 6px;
-              font-size: 13px; border-radius: 6px; }
-button.link:hover { background: var(--line); color: var(--ink); filter: none; }
-button.danger { background: transparent; color: var(--bad); border-color: var(--line); }
-button.danger:hover { background: var(--bad); color: #fff; border-color: transparent;
-                      filter: none; }
-.note { margin: 0 0 14px; font-size: 13px; color: var(--bad);
-        background: color-mix(in srgb, var(--bad) 10%, transparent); border-radius: 9px;
-        padding: 10px 13px; }
+button:hover { filter: brightness(1.07); }
+button.quiet { height: 28px; padding: 0 9px; background: none; color: var(--muted);
+               font-weight: 450; font-size: 13px; }
+button.quiet:hover { background: var(--line-soft); color: var(--ink); filter: none; }
+button.quiet.risk:hover { color: var(--bad); }
+.warn { margin: 0 0 12px; padding: 9px 12px; border-radius: 8px; font-size: 13px;
+        color: var(--bad); background: color-mix(in srgb, var(--bad) 9%, transparent); }
 
-/* bars */
-.bars { display: grid; gap: 7px; }
-.bars .b { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px;
-           position: relative; padding: 7px 11px; border-radius: 8px; overflow: hidden;
-           font-size: 14px; }
-.bars .fill { position: absolute; inset: 0 auto 0 0; background: var(--bar); border-radius: 8px; }
+/* ---- bars ---- */
+.bars { display: grid; gap: 6px; }
+.bars .b { position: relative; display: grid; grid-template-columns: 1fr auto; gap: 10px;
+           align-items: center; padding: 6px 10px; border-radius: 6px; font-size: 13.5px; }
+.bars .fill { position: absolute; inset: 0 auto 0 0; background: var(--bar); border-radius: 6px; }
 .bars .b > span { position: relative; }
-.bars .n { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
+.bars .n { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12.5px; }
 
-/* login */
-.login { max-width: 350px; margin: 14vh auto; }
-.login h1 { text-align: center; margin-bottom: 20px; font-size: 22px; }
-.login .card { padding: 22px; }
-.login form { display: grid; gap: 16px; }
+/* ---- login ---- */
+.login { width: 300px; margin: 16vh auto; }
+.login h1 { margin-bottom: 18px; text-align: center; }
+.login form { display: grid; gap: 14px; }
 .login button { width: 100%; }
 """
 
 ICONS = {
-    "overview": '<rect x="3" y="3" width="7.5" height="7.5" rx="2"/>'
-                '<rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/>'
-                '<rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/>'
-                '<rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/>',
-    "globe": '<circle cx="12" cy="12" r="9"/><path d="M3.2 9h17.6M3.2 15h17.6"/>'
-             '<path d="M12 3c2.4 2.4 3.6 5.4 3.6 9S14.4 18.6 12 21c-2.4-2.4-3.6-5.4-3.6-9S9.6 5.4 12 3z"/>',
-    "logout": '<path d="M14 3h4.5A2.5 2.5 0 0 1 21 5.5v13a2.5 2.5 0 0 1-2.5 2.5H14"/>'
-              '<path d="M9.5 16.5 14 12 9.5 7.5"/><path d="M14 12H3"/>',
-    "panel": '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9.5 4v16"/>',
+    "overview": '<path d="M4 13.5 9 8.5l3.5 3.5L20 4.5"/><path d="M4 19.5h16"/>',
+    "globe": '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 9.5h17M3.5 14.5h17"/>'
+             '<path d="M12 3.5c2.3 2.3 3.4 5.1 3.4 8.5S14.3 18.2 12 20.5c-2.3-2.3-3.4-5.1-3.4-8.5"'
+             ' /><path d="M12 3.5C9.7 5.8 8.6 8.6 8.6 12"/>',
+    "plus": '<path d="M12 5.5v13M5.5 12h13"/>',
+    "logout": '<path d="M14 3.5h4A2.5 2.5 0 0 1 20.5 6v12a2.5 2.5 0 0 1-2.5 2.5h-4"/>'
+              '<path d="m9.5 16 4-4-4-4"/><path d="M13.5 12H3.5"/>',
+    "panel": '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M9.5 4.5v15"/>',
 }
 
 
-def icon(name: str) -> str:
+def icon(name: str, size: int = 17) -> str:
     return (
-        '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
-        f'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">{ICONS[name]}</svg>'
+        f'<svg width="{size}" height="{size}" viewBox="0 0 24 24" fill="none" '
+        'stroke="currentColor" stroke-width="1.7" stroke-linecap="round" '
+        f'stroke-linejoin="round">{ICONS[name]}</svg>'
     )
+
+
+SCRIPT = """
+<script>
+document.addEventListener('submit',e=>{const m=e.target.dataset.confirm;if(m&&!confirm(m))e.preventDefault()});
+document.addEventListener('click',e=>{if(!e.target.closest('.toggle'))return;
+  const s=document.querySelector('.shell');s.classList.toggle('collapsed');
+  try{localStorage.setItem('sidebar',s.classList.contains('collapsed')?'1':'0')}catch(_){}});
+</script>
+"""
+
+EARLY = ("<script>try{if(localStorage.getItem('sidebar')==='1')"
+         "document.currentScript.parentNode.classList.add('collapsed')}catch(_){}</script>")
 
 
 def _initials(name: str) -> str:
@@ -171,40 +171,29 @@ def _initials(name: str) -> str:
 def sidebar(apps, active: str) -> str:
     def item(href: str, mark: str, label: str, key: str) -> str:
         on = " on" if key == active else ""
-        return (f'<a class="item{on}" href="{href}" title="{escape(label)}">'
-                f'{mark}<span class="label">{escape(label)}</span></a>')
+        return (f'<a class="item{on}" href="{href}" title="{escape(label)}">{mark}'
+                f'<span class="label">{escape(label)}</span></a>')
 
     entries = "".join(
         item(f'/a/{escape(a["slug"])}', f'<span class="avatar">{_initials(a["name"])}</span>',
              a["name"], f'app:{a["slug"]}')
         for a in apps
     )
+    group = '<p class="group">Apps</p>' if apps else ""
     return f"""<aside>
       <div class="side-head"><span class="brand">Redeemer</span>
-        <button class="collapse" aria-label="Toggle sidebar">{icon("panel")}</button></div>
+        <button class="toggle" aria-label="Toggle sidebar">{icon("panel", 18)}</button></div>
       <nav>
         {item("/", icon("overview"), "Overview", "overview")}
         {item("/global", icon("globe"), "Global codes", "global")}
-        <p class="side-label">Apps</p>
-        {entries or '<span class="side-label faint" style="text-transform:none;letter-spacing:0">None yet</span>'}
+        {group}{entries}
+        {item("/apps/new", icon("plus"), "New app", "new")}
       </nav>
       <form class="side-foot" method="post" action="/logout">
-        <button class="item" title="Sign out">{icon("logout")}<span class="label">Sign out</span></button>
+        <button class="item" title="Sign out">{icon("logout")}
+          <span class="label">Sign out</span></button>
       </form>
     </aside>"""
-
-
-SCRIPT = """
-<script>
-document.addEventListener('submit',e=>{const m=e.target.dataset.confirm;if(m&&!confirm(m))e.preventDefault()});
-document.addEventListener('click',e=>{const b=e.target.closest('.collapse');if(!b)return;
-  const s=document.querySelector('.shell');s.classList.toggle('collapsed');
-  try{localStorage.setItem('sidebar',s.classList.contains('collapsed')?'1':'0')}catch(_){}});
-</script>
-"""
-
-EARLY = ("<script>try{if(localStorage.getItem('sidebar')==='1')"
-         "document.currentScript.parentNode.classList.add('collapsed')}catch(_){}</script>")
 
 
 def page(title: str, apps, active: str, body: str) -> str:
@@ -222,28 +211,38 @@ def login_page(error: str = "") -> str:
         "<!doctype html><html lang=en><meta charset=utf-8>"
         '<meta name=viewport content="width=device-width,initial-scale=1">'
         "<title>Sign in · Redeemer</title><link rel=stylesheet href=/style.css>"
-        f'<div class="login"><h1>Redeemer</h1><div class="card">{_note(error)}'
+        f'<div class="login"><h1>Redeemer</h1>{warn(error)}'
         '<form method="post" action="/login">'
         '<label>Password<input type="password" name="password" autofocus></label>'
-        "<button>Sign in</button></form></div></div></html>"
+        "<button>Sign in</button></form></div></html>"
     )
 
 
 def not_found(apps=()) -> str:
-    return page("Not found", apps, "", '<div class="card"><p class="empty">Not found.</p></div>')
+    return page("Not found", apps, "", '<div class="box"><p class="empty">Not found.</p></div>')
 
 
 # --- pieces ------------------------------------------------------------------
 
 
-def _note(message: str) -> str:
-    return f'<p class="note">{escape(message)}</p>' if message else ""
+def warn(message: str) -> str:
+    return f'<p class="warn">{escape(message)}</p>' if message else ""
 
 
-def _stats(items) -> str:
-    cells = "".join(f"<div class=stat><b>{value}</b><span>{escape(label)}</span></div>"
-                    for label, value in items)
-    return f'<div class="stats">{cells}</div>'
+def facts(*parts: str) -> str:
+    return f'<p class="facts">{" · ".join(p for p in parts if p)}</p>'
+
+
+def section(title: str, body: str, *, link: tuple[str, str] | None = None) -> str:
+    extra = f'<a href="{link[0]}">{escape(link[1])}</a>' if link else ""
+    return f'<section><p class="title">{escape(title)}{extra}</p>{body}</section>'
+
+
+def table(head: str, rows: list[str], empty: str) -> str:
+    if not rows:
+        return f'<div class="box"><p class="empty">{escape(empty)}</p></div>'
+    return (f'<div class="box scroll"><table><thead>{head}</thead>'
+            f'<tbody>{"".join(rows)}</tbody></table></div>')
 
 
 def _flag(country: str) -> str:
@@ -254,7 +253,7 @@ def _flag(country: str) -> str:
 
 def bars(rows, title: str, *, flags: bool = False) -> str:
     if not rows:
-        return f'<h2>{escape(title)}</h2><div class="card"><p class="empty">No data yet</p></div>'
+        return section(title, '<div class="box"><p class="empty">Nothing yet</p></div>')
     top = max(row["count"] for row in rows) or 1
     items = "".join(
         f'<div class="b"><div class="fill" style="width:{row["count"] * 100 // top}%"></div>'
@@ -262,70 +261,50 @@ def bars(rows, title: str, *, flags: bool = False) -> str:
         f'<span class="n">{row["count"]}</span></div>'
         for row in rows
     )
-    return f'<h2>{escape(title)}</h2><div class="card pad"><div class="bars">{items}</div></div>'
+    return section(title, f'<div class="box pad"><div class="bars">{items}</div></div>')
 
 
-def _table(head: str, rows: str, empty: str) -> str:
-    if not rows:
-        return f'<div class="card"><p class="empty">{escape(empty)}</p></div>'
-    return (f'<div class="card scroll"><table><thead>{head}</thead>'
-            f"<tbody>{rows}</tbody></table></div>")
+PLATFORMS = {"": "Any", "ios": "iOS", "android": "Android", "ios,android": "iOS + Android"}
 
 
-PLATFORM_LABELS = {"": "Any", "ios": "iOS", "android": "Android", "ios,android": "iOS + Android"}
-
-
-def _platform(value) -> str:
-    label = PLATFORM_LABELS.get(value or "", value or "Any")
-    return f'<span class="faint">{escape(label)}</span>' if not value else escape(label)
+def _select(name: str, options: dict, chosen: str) -> str:
+    items = "".join(
+        f'<option value="{escape(v)}"{" selected" if v == chosen else ""}>{escape(t)}</option>'
+        for v, t in options.items()
+    )
+    return f'<select name="{name}">{items}</select>'
 
 
 def _uses(row) -> str:
     return f'{row["uses"]} / {"∞" if row["max_uses"] is None else row["max_uses"]}'
 
 
-def _state(row) -> str:
-    return ('<span class="pill on">on</span>' if row["enabled"]
-            else '<span class="pill off">off</span>')
-
-
-def _device(device_id) -> str:
-    if not device_id:
-        return '<td class="faint">anonymous</td>'
-    return f'<td class="mono faint">{escape(device_id[:8])}…</td>'
-
-
-def _select(name: str, options: dict, chosen: str) -> str:
-    items = "".join(
-        f'<option value="{escape(value)}"{" selected" if value == chosen else ""}>'
-        f"{escape(label)}</option>"
-        for value, label in options.items()
-    )
-    return f'<select name="{name}">{items}</select>'
+def code_rows(codes) -> list[str]:
+    rows = []
+    for c in codes:
+        code = escape(c["code"])
+        platform = PLATFORMS.get(c["platforms"] or "", c["platforms"] or "Any")
+        expires = (c["expires_at"] or "")[:10]
+        rows.append(
+            "<tr>"
+            f'<td><a class="code-link" href="/c/{code}">{code}</a></td>'
+            f'<td class="muted">{escape(c["note"]) or ""}</td>'
+            f'<td class="num">{_uses(c)}</td>'
+            f'<td class="muted">{escape(platform)}</td>'
+            f'<td class="muted">{escape(expires)}</td>'
+            f'<td><span class="dot{"" if c["enabled"] else " off"}"></span>'
+            f'{"Active" if c["enabled"] else "Off"}</td>'
+            f'<td class="act"><form method="post" action="/c/{code}/toggle">'
+            f'<button class="quiet">{"Disable" if c["enabled"] else "Enable"}</button></form></td>'
+            "</tr>"
+        )
+    return rows
 
 
 def code_table(codes) -> str:
     head = ("<tr><th>Code</th><th>Note</th><th class=num>Uses</th><th>Platform</th>"
-            "<th>Expires</th><th>State</th><th></th></tr>")
-    rows = []
-    for c in codes:
-        code = escape(c["code"])
-        rows.append(
-            "<tr>"
-            f'<td class="mono"><a href="/c/{code}">{code}</a></td>'
-            f'<td>{escape(c["note"]) or "<span class=faint>—</span>"}</td>'
-            f'<td class="num">{_uses(c)}</td>'
-            f"<td>{_platform(c['platforms'])}</td>"
-            f'<td class="faint">{escape((c["expires_at"] or "—")[:10])}</td>'
-            f"<td>{_state(c)}</td>"
-            '<td><div class="row-actions">'
-            f'<form method="post" action="/c/{code}/toggle">'
-            f'<button class="link">{"Disable" if c["enabled"] else "Enable"}</button></form>'
-            f'<form method="post" action="/c/{code}/delete" data-confirm="Delete {code}?">'
-            '<button class="link">Delete</button></form>'
-            "</div></td></tr>"
-        )
-    return _table(head, "".join(rows), "No codes yet")
+            "<th>Expires</th><th>Status</th><th></th></tr>")
+    return table(head, code_rows(codes), "No codes yet")
 
 
 def redemption_table(redemptions, *, with_app: bool = False, with_code: bool = True) -> str:
@@ -335,83 +314,87 @@ def redemption_table(redemptions, *, with_app: bool = False, with_code: bool = T
     rows = []
     for r in redemptions:
         country = r["country"] or ""
+        device = (f'<td class="mono faint">{escape(r["device_id"][:8])}…</td>'
+                  if r["device_id"] else '<td class="faint">anonymous</td>')
         rows.append(
             "<tr>"
-            f'<td class="mono faint">{escape(r["redeemed_at"][:16].replace("T", " "))}</td>'
-            + (f'<td class="mono">{escape(r["app_slug"])}</td>' if with_app else "")
-            + (f'<td class="mono"><a href="/c/{escape(r["code"])}">{escape(r["code"])}</a></td>'
-               if with_code else "")
-            + f'<td>{escape(r["platform"] or "—")}</td>'
-            + f'<td class="mono faint">{escape(r["app_version"] or "—")}</td>'
-            + f'<td>{_flag(country)}{escape(country or "—")}</td>'
-            + _device(r["device_id"])
+            f'<td class="muted">{escape(r["redeemed_at"][:16].replace("T", " "))}</td>'
+            + (f'<td>{escape(r["app_slug"])}</td>' if with_app else "")
+            + (f'<td><a class="code-link" href="/c/{escape(r["code"])}">'
+               f'{escape(r["code"])}</a></td>' if with_code else "")
+            + f'<td class="muted">{escape(r["platform"] or "—")}</td>'
+            + f'<td class="muted">{escape(r["app_version"] or "—")}</td>'
+            + f'<td class="muted">{_flag(country)}{escape(country or "—")}</td>'
+            + device
             + "</tr>"
         )
-    return _table(head, "".join(rows), "No redemptions yet")
+    return table(head, rows, "No redemptions yet")
 
 
 def code_form(action: str, values: dict) -> str:
-    def field(name: str) -> str:
-        return escape(values.get(name, ""))
+    def field(name: str, fallback: str = "") -> str:
+        return escape(values.get(name, "") or fallback)
 
-    return f"""
-    <form class="fields" method="post" action="{action}">
-      <label>Code<input name="code" placeholder="auto-generated" class="mono"
-             value="{field("code")}"></label>
-      <label>How many<input name="quantity" type="number" min="1" max="500" style="width:6.5em"
-             value="{field("quantity") or "1"}"></label>
-      <label>Note<input name="note" placeholder="press, giveaway…" value="{field("note")}"></label>
-      <label>Max uses<input name="max_uses" type="number" min="1" placeholder="∞"
-             style="width:6.5em" value="{field("max_uses")}"></label>
-      <label>Platform{_select("platforms", PLATFORM_LABELS, values.get("platforms", ""))}</label>
-      <label>Expires<input name="expires_at" type="date" value="{field("expires_at")}"></label>
-      <button>Create</button>
-    </form>"""
+    return f"""<div class="box pad">
+      <form class="fields" method="post" action="{action}">
+        <label>Code<input name="code" class="mono" placeholder="auto" style="width:8.5em"
+               value="{field("code")}"></label>
+        <label>How many<input name="quantity" type="number" min="1" max="500" style="width:5em"
+               value="{field("quantity", "1")}"></label>
+        <label>Note<input name="note" placeholder="optional" style="width:10em"
+               value="{field("note")}"></label>
+        <label>Max uses<input name="max_uses" type="number" min="1" placeholder="∞"
+               style="width:5.5em" value="{field("max_uses")}"></label>
+        <label>Platform{_select("platforms", PLATFORMS, values.get("platforms", ""))}</label>
+        <label>Expires<input name="expires_at" type="date" value="{field("expires_at")}"></label>
+        <button>Create</button>
+      </form>
+    </div>"""
+
+
+def _plural(count: int, one: str, many: str) -> str:
+    return f"<b>{count}</b> {one if count == 1 else many}"
 
 
 # --- pages -------------------------------------------------------------------
 
 
-def dashboard(totals, apps, platforms, countries, redemptions, values=None, error="") -> str:
-    values = values or {}
-    rows = "".join(
-        "<tr>"
-        f'<td><a href="/a/{escape(a["slug"])}">{escape(a["name"])}</a></td>'
-        f'<td class="mono faint">{escape(a["slug"])}</td>'
-        f'<td class="num">{a["code_count"]}</td>'
-        f'<td class="num">{a["redemption_count"]}</td>'
-        "</tr>"
-        for a in apps
-    )
-    table = _table(
-        "<tr><th>App</th><th>Slug</th><th class=num>Codes</th><th class=num>Redemptions</th></tr>",
-        rows,
-        "No apps yet. Add one below to start issuing codes.",
-    )
+def dashboard(totals, apps, platforms, countries, redemptions) -> str:
+    if not apps:
+        return page(
+            "Overview", apps, "overview",
+            '<div class="head"><h1>Overview</h1></div>'
+            '<div class="box"><p class="empty">No apps yet. '
+            '<a href="/apps/new" style="color:var(--accent)">Add the first one</a> '
+            "to start issuing codes.</p></div>",
+        )
     return page(
         "Overview", apps, "overview",
-        f"""<div class="page-head"><div><h1>Overview</h1>
-          <p class="sub">Every app, code and redemption on this server.</p></div></div>
-        {_stats([("apps", totals["apps"]), ("codes", totals["codes"]),
-                 ("active", totals["active_codes"]), ("redemptions", totals["redemptions"]),
-                 ("devices", totals["devices"])])}
-        <h2>Apps</h2>
-        {table}
-        <div class="card pad">{_note(error)}
+        f"""<div class="head"><h1>Overview</h1></div>
+        {facts(_plural(totals["apps"], "app", "apps"),
+               _plural(totals["active_codes"], "active code", "active codes"),
+               _plural(totals["redemptions"], "redemption", "redemptions"))}
+        <div class="split">{bars(platforms, "Platforms")}
+          {bars(countries, "Countries", flags=True)}</div>
+        {section("Latest redemptions", redemption_table(redemptions, with_app=True))}""",
+    )
+
+
+def new_app(apps, values=None, error="") -> str:
+    values = values or {}
+    return page(
+        "New app", apps, "new",
+        f"""<div class="head"><h1>New app</h1></div>
+        {facts("The slug is what your app sends in every request. Pick it once; it cannot change.")}
+        <div class="box pad">{warn(error)}
           <form class="fields" method="post" action="/apps">
-            <label>Slug<input name="slug" placeholder="my-app" class="mono" required
-                   value="{escape(values.get("slug", ""))}"></label>
-            <label>Name<input name="name" placeholder="My App" required
+            <label>Slug<input name="slug" class="mono" placeholder="my-app" required
+                   style="width:14em" value="{escape(values.get("slug", ""))}"></label>
+            <label>Name<input name="name" placeholder="My App" required style="width:14em"
                    value="{escape(values.get("name", ""))}"></label>
-            <button>Add app</button>
+            <button>Create</button>
           </form>
-        </div>
-        <div class="grid2">
-          <div>{bars(platforms, "By platform")}</div>
-          <div>{bars(countries, "By country", flags=True)}</div>
-        </div>
-        <h2>Latest redemptions</h2>
-        {redemption_table(redemptions, with_app=True)}""",
+        </div>""",
     )
 
 
@@ -420,67 +403,62 @@ def app_page(app, apps, codes, redemptions, platforms, countries, values=None, e
     slug = app["slug"] if app else None
     title = app["name"] if app else "Global codes"
     base = f"/a/{slug}" if slug else "/global"
+    used = sum(c["uses"] for c in codes)
     if slug:
-        head = f"""<div class="page-head">
-          <div><h1>{escape(title)}</h1><p class="sub mono">{escape(slug)}</p></div>
+        head = f"""<div class="head"><h1>{escape(title)}</h1>
           <form method="post" action="/a/{escape(slug)}/delete"
                 data-confirm="Delete {escape(title)} and all its codes?">
-            <button class="danger">Delete app</button></form></div>"""
+            <button class="quiet risk">Delete app</button></form></div>
+        {facts(f'<span class="mono">{escape(slug)}</span>',
+               _plural(len(codes), "code", "codes"),
+               _plural(used, "redemption", "redemptions"))}"""
     else:
-        head = """<div class="page-head"><div><h1>Global codes</h1>
-          <p class="sub">Valid in every registered app. Each app spends one use.</p></div></div>"""
-    stats = _stats([("codes", len(codes)),
-                    ("active", sum(1 for c in codes if c["enabled"])),
-                    ("redemptions", sum(c["uses"] for c in codes))])
-    breakdowns = (
-        f'<div class="grid2"><div>{bars(platforms, "By platform")}</div>'
-        f'<div>{bars(countries, "By country", flags=True)}</div></div>'
-        if slug
-        else ""
-    )
+        head = ('<div class="head"><h1>Global codes</h1></div>'
+                + facts("Valid in every app. Each app spends one use.",
+                        _plural(len(codes), "code", "codes"),
+                        _plural(used, "redemption", "redemptions")))
+    charts = (f'<div class="split">{bars(platforms, "Platforms")}'
+              f'{bars(countries, "Countries", flags=True)}</div>' if slug else "")
     return page(
         title, apps, f"app:{slug}" if slug else "global",
-        f"""{head}{stats}
-        <h2>New codes</h2>
-        <div class="card pad">{_note(error)}{code_form(base + "/codes", values)}</div>
-        <h2>Codes <a class="faint" href="{base}/codes.csv">· export CSV</a></h2>
-        {code_table(codes)}
-        {breakdowns}
-        <h2>Latest redemptions</h2>
-        {redemption_table(redemptions, with_app=not slug)}""",
+        f"""{head}
+        {section("New codes", warn(error) + code_form(base + "/codes", values))}
+        {section("Codes", code_table(codes), link=(base + "/codes.csv", "Export CSV"))}
+        {charts}
+        {section("Latest redemptions", redemption_table(redemptions, with_app=not slug))}""",
     )
 
 
 def code_page(code, apps, redemptions) -> str:
-    scope = (f'<a href="/a/{escape(code["app_slug"])}">{escape(code["app_slug"])}</a>'
-             if code["app_slug"] else "all apps")
+    name = escape(code["code"])
+    scope = (f'<a href="/a/{escape(code["app_slug"])}" style="color:var(--accent)">'
+             f'{escape(code["app_slug"])}</a>' if code["app_slug"] else "every app")
+    limits = [
+        f'<b>{code["uses"]}</b> of {"∞" if code["max_uses"] is None else code["max_uses"]} uses',
+        PLATFORMS.get(code["platforms"], "any platform") if code["platforms"] else "any platform",
+        f'expires {escape(code["expires_at"][:10])}' if code["expires_at"] else "",
+        "active" if code["enabled"] else "disabled",
+    ]
     return page(
         code["code"], apps, f'app:{code["app_slug"]}' if code["app_slug"] else "global",
-        f"""<div class="page-head">
-          <div><h1 class="mono">{escape(code["code"])}</h1>
-          <p class="sub">Scope: {scope} · created {escape(code["created_at"][:10])}</p></div>
-          <form method="post" action="/c/{escape(code["code"])}/delete"
-                data-confirm="Delete {escape(code["code"])}?">
-            <button class="danger">Delete</button></form></div>
-        {_stats([("uses", code["uses"]),
-                 ("max uses", "∞" if code["max_uses"] is None else code["max_uses"]),
-                 ("platform", PLATFORM_LABELS.get(code["platforms"] or "", "Any")),
-                 ("state", "on" if code["enabled"] else "off")])}
-        <h2>Settings</h2>
-        <div class="card pad">
-          <form class="fields" method="post" action="/c/{escape(code["code"])}">
-            <label>Note<input name="note" value="{escape(code["note"])}"></label>
+        f"""<div class="head"><h1 class="mono">{name}</h1>
+          <form method="post" action="/c/{name}/delete" data-confirm="Delete {name}?">
+            <button class="quiet risk">Delete code</button></form></div>
+        {facts(f"valid in {scope}", *limits)}
+        {section("Settings", f'''<div class="box pad">
+          <form class="fields" method="post" action="/c/{name}">
+            <label>Note<input name="note" style="width:14em"
+                   value="{escape(code["note"])}"></label>
             <label>Max uses<input name="max_uses" type="number" min="1" placeholder="∞"
-                   value="{code["max_uses"] if code["max_uses"] is not None else ""}"
-                   style="width:6.5em"></label>
-            <label>Platform{_select("platforms", PLATFORM_LABELS, code["platforms"] or "")}</label>
+                   style="width:6em"
+                   value="{code["max_uses"] if code["max_uses"] is not None else ""}"></label>
+            <label>Platform{_select("platforms", PLATFORMS, code["platforms"] or "")}</label>
             <label>Expires<input name="expires_at" type="date"
                    value="{escape((code["expires_at"] or "")[:10])}"></label>
             <label class="check"><input name="enabled" type="checkbox" value="1"
                    {"checked" if code["enabled"] else ""}> Enabled</label>
             <button>Save</button>
-          </form>
-        </div>
-        <h2>Redemptions</h2>
-        {redemption_table(redemptions, with_app=True, with_code=False)}""",
+          </form></div>''')}
+        {section("Redemptions",
+                 redemption_table(redemptions, with_app=True, with_code=False))}""",
     )

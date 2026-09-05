@@ -182,7 +182,7 @@ class HttpTest(unittest.TestCase):
     def test_form_keeps_values_when_it_fails(self):
         headers = {"Cookie": self.login(), "Content-Type": "application/x-www-form-urlencoded"}
         conn = HTTPConnection("127.0.0.1", self.port, timeout=5)
-        conn.request("POST", "/apps", "slug=Bad Slug&name=Keep Me", headers)
+        conn.request("POST", "/apps", "slug=Bad+Slug&name=Keep+Me", headers)
         response = conn.getresponse()
         body = response.read()
         conn.close()

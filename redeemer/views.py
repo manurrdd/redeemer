@@ -102,10 +102,13 @@ tr.fresh td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
 /* ---- forms ---- */
 .fields { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
 label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--muted); }
+fieldset { border: 1px solid var(--line); border-radius: 7px; padding: 5px 10px; min-width: 0; }
+legend { color: var(--muted); font-size: 12px; }
 label.check { flex-direction: row; align-items: center; gap: 7px; height: 34px; }
 input, select { height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 7px;
                 background: var(--bg); color: var(--ink); font: inherit; font-size: 13.5px; }
 input[type=date] { padding-right: 6px; }
+input[type=file] { padding: 6px 8px; }
 input::placeholder { color: var(--faint); }
 input:focus, select:focus { outline: none; border-color: var(--accent);
                             box-shadow: 0 0 0 3px var(--accent-soft); }
@@ -144,6 +147,9 @@ ICONS = {
     "logout": '<path d="M14 3.5h4A2.5 2.5 0 0 1 20.5 6v12a2.5 2.5 0 0 1-2.5 2.5h-4"/>'
               '<path d="m9.5 16 4-4-4-4"/><path d="M13.5 12H3.5"/>',
     "panel": '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M9.5 4.5v15"/>',
+    "backup": '<rect x="2.5" y="3.5" width="19" height="5" rx="1.5"/>'
+              '<path d="M4.5 8.5v10a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-10"/>'
+              '<path d="M10 12.5h4"/>',
 }
 
 
@@ -193,6 +199,7 @@ def sidebar(apps, active: str) -> str:
         {item("/global", icon("globe"), "Global codes", "global")}
         {group}{entries}
         {item("/apps/new", icon("plus"), "New app", "new")}
+        {item("/backup", icon("backup"), "Backup", "backup")}
       </nav>
       <form class="side-foot" method="post" action="/logout">
         <button class="item" title="Sign out">{icon("logout")}
@@ -281,7 +288,10 @@ def _select(name: str, options: dict, chosen: str) -> str:
 
 
 def _uses(row) -> str:
-    return f'{row["uses"]} / {"∞" if row["max_uses"] is None else row["max_uses"]}'
+    limit = "∞" if row["max_uses"] is None else row["max_uses"]
+    if row["quota_mode"] == "per_app":
+        return f'{row["uses"]} total · {limit}/app'
+    return f'{row["uses"]} / {limit} shared'
 
 
 def code_rows(codes, fresh: str = "") -> list[str]:
@@ -293,14 +303,15 @@ def code_rows(codes, fresh: str = "") -> list[str]:
         expires = (c["expires_at"] or "")[:10]
         rows.append(
             f"<tr{new}>"
-            f'<td><a class="code-link" href="/c/{code}">{code}</a></td>'
+            f'<td><a class="code-link" href="/c/{c['id']}">{code}</a></td>'
             f'<td class="muted">{escape(c["note"]) or ""}</td>'
+            f'<td>{"All apps" if c["is_global"] else escape(c["app_names"] or "")}</td>'
             f'<td class="num">{_uses(c)}</td>'
             f'<td class="muted">{escape(platform)}</td>'
             f'<td class="muted">{escape(expires)}</td>'
             f'<td><span class="dot{"" if c["enabled"] else " off"}"></span>'
             f'{"Active" if c["enabled"] else "Off"}</td>'
-            f'<td class="act"><form method="post" action="/c/{code}/toggle">'
+            f'<td class="act"><form method="post" action="/c/{c['id']}/toggle">'
             f'<button class="quiet">{"Disable" if c["enabled"] else "Enable"}</button></form></td>'
             "</tr>"
         )
@@ -308,7 +319,7 @@ def code_rows(codes, fresh: str = "") -> list[str]:
 
 
 def code_table(codes, fresh: str = "") -> str:
-    head = ("<tr><th>Code</th><th>Note</th><th class=num>Uses</th><th>Platform</th>"
+    head = ("<tr><th>Code</th><th>Note</th><th>Apps</th><th class=num>Uses</th><th>Platform</th>"
             "<th>Expires</th><th>Status</th><th></th></tr>")
     return table(head, code_rows(codes, fresh), "No codes yet")
 
@@ -326,7 +337,7 @@ def redemption_table(redemptions, *, with_app: bool = False, with_code: bool = T
             "<tr>"
             f'<td class="muted">{escape(r["redeemed_at"][:16].replace("T", " "))}</td>'
             + (f'<td>{escape(r["app_slug"])}</td>' if with_app else "")
-            + (f'<td><a class="code-link" href="/c/{escape(r["code"])}">'
+            + (f'<td><a class="code-link" href="/c/{r["code_id"]}">'
                f'{escape(r["code"])}</a></td>' if with_code else "")
             + f'<td class="muted">{escape(r["platform"] or "—")}</td>'
             + f'<td class="muted">{escape(r["app_version"] or "—")}</td>'
@@ -337,12 +348,24 @@ def redemption_table(redemptions, *, with_app: bool = False, with_code: bool = T
     return table(head, rows, "No redemptions yet")
 
 
-def code_form(action: str, values: dict) -> str:
+QUOTAS = {"shared": "Shared across apps", "per_app": "Per app"}
+
+
+def code_form(action: str, values: dict, apps, default_slug=None) -> str:
     def field(name: str, fallback: str = "") -> str:
         return escape(values.get(name, "") or fallback)
 
+    chosen_scope = values.get("scope", "selected" if default_slug else "global")
+    choices = "".join(
+        f'<label class="check"><input type="checkbox" name="app:{escape(a["slug"])}" value="1" '
+        f'{"checked" if values.get("app:" + a["slug"]) == "1" or (not values and a["slug"] == default_slug) else ""}>'
+        f'{escape(a["name"])}</label>' for a in apps
+    )
     return f"""<div class="box pad">
       <form class="fields" method="post" action="{action}">
+        <label>Valid in{_select("scope", {"selected": "Selected apps", "global": "All apps (including future apps)"}, chosen_scope)}</label>
+        <fieldset><legend>Apps (used only for Selected apps)</legend>{choices or "Register an app first."}</fieldset>
+        <label>Quota{_select("quota_mode", QUOTAS, values.get("quota_mode", "shared"))}</label>
         <label>Code<input name="code" class="mono" placeholder="auto" style="width:8.5em"
                value="{field("code")}"></label>
         <label>How many<input name="quantity" type="number" min="1" max="500" style="width:5em"
@@ -386,6 +409,22 @@ def dashboard(totals, apps, platforms, countries, redemptions) -> str:
     )
 
 
+def backup_page(apps, count: int, latest: str, error: str = "") -> str:
+    return page(
+        "Backup", apps, "backup",
+        f"""<div class="head"><h1>Backup</h1>
+          <form method="get" action="/backup.db.gz"><button>Download</button></form></div>
+        {facts(_plural(count, "snapshot", "snapshots") + " on the server" if count else "",
+               f"latest {escape(latest)}" if latest else "")}
+        {section("Restore", f'''<div class="box pad">{warn(error)}
+          <form class="fields" method="post" action="/restore" enctype="multipart/form-data"
+                data-confirm="Replace every app, code and redemption with this file?">
+            <input type="file" name="file" accept=".gz,.db" required>
+            <button>Restore</button>
+          </form></div>''')}""",
+    )
+
+
 def new_app(apps, values=None, error="") -> str:
     values = values or {}
     return page(
@@ -410,18 +449,18 @@ def app_page(app, apps, codes, redemptions, platforms, countries,
     slug = app["slug"] if app else None
     title = app["name"] if app else "Global codes"
     base = f"/a/{slug}" if slug else "/global"
-    used = sum(c["uses"] for c in codes)
+    used = app["redemption_count"] if app else sum(c["uses"] for c in codes)
     if slug:
         head = f"""<div class="head"><h1>{escape(title)}</h1>
           <form method="post" action="/a/{escape(slug)}/delete"
-                data-confirm="Delete {escape(title)} and all its codes?">
+                data-confirm="Delete {escape(title)}? Codes shared with other apps will remain.">
             <button class="quiet risk">Delete app</button></form></div>
         {facts(f'<span class="mono">{escape(slug)}</span>',
                _plural(len(codes), "code", "codes"),
                _plural(used, "redemption", "redemptions"))}"""
     else:
         head = ('<div class="head"><h1>Global codes</h1></div>'
-                + facts("Valid in every app. Each app spends one use.",
+                + facts("Valid in every registered app, including future apps. Quota is shared or per app.",
                         _plural(len(codes), "code", "codes"),
                         _plural(used, "redemption", "redemptions")))
     banner = ""
@@ -432,7 +471,7 @@ def app_page(app, apps, codes, redemptions, platforms, countries,
     return page(
         title, apps, f"app:{slug}" if slug else "global",
         f"""{head}
-        {section("New codes", warn(error) + code_form(base + "/codes", values))}
+        {section("New codes", warn(error) + code_form(base + "/codes", values, apps, slug))}
         {section("Codes", banner + code_table(codes, fresh),
                  link=(base + "/codes.csv", "Export CSV"))}
         <div class="split">{bars(platforms, "Platforms")}
@@ -441,29 +480,32 @@ def app_page(app, apps, codes, redemptions, platforms, countries,
     )
 
 
-def code_page(code, apps, redemptions, platforms, countries) -> str:
+def code_page(code, apps, redemptions, platforms, countries, app_slugs, app_uses) -> str:
     name = escape(code["code"])
-    scope = (f'<a href="/a/{escape(code["app_slug"])}" style="color:var(--accent)">'
-             f'{escape(code["app_slug"])}</a>' if code["app_slug"] else "every app")
+    scope = "every app (including future apps)" if code["is_global"] else ", ".join(
+        f'<a href="/a/{escape(slug)}">{escape(slug)}</a>' for slug in app_slugs
+    )
     limits = [
-        f'<b>{code["uses"]}</b> of {"∞" if code["max_uses"] is None else code["max_uses"]} uses',
+        _uses(code),
         PLATFORMS.get(code["platforms"], "any platform") if code["platforms"] else "any platform",
         f'expires {escape(code["expires_at"][:10])}' if code["expires_at"] else "",
         "active" if code["enabled"] else "disabled",
     ]
     return page(
-        code["code"], apps, f'app:{code["app_slug"]}' if code["app_slug"] else "global",
+        code["code"], apps, f"app:{app_slugs[0]}" if app_slugs else "global",
         f"""<div class="head"><h1 class="mono">{name}</h1>
-          <form method="post" action="/c/{name}/delete" data-confirm="Delete {name}?">
+          <form method="post" action="/c/{code['id']}/delete" data-confirm="Delete {name}?">
             <button class="quiet risk">Delete code</button></form></div>
         {facts(f"valid in {scope}", *limits)}
         {section("Settings", f'''<div class="box pad">
-          <form class="fields" method="post" action="/c/{name}">
+          <form class="fields" method="post" action="/c/{code['id']}">
             <label>Note<input name="note" style="width:14em"
                    value="{escape(code["note"])}"></label>
             <label>Max uses<input name="max_uses" type="number" min="1" placeholder="∞"
                    style="width:6em"
                    value="{code["max_uses"] if code["max_uses"] is not None else ""}"></label>
+            <label>Quota{_select("quota_mode", QUOTAS, code["quota_mode"])}</label>
+            <span class="muted">Changing the quota keeps all previous uses.</span>
             <label>Platform{_select("platforms", PLATFORMS, code["platforms"] or "")}</label>
             <label>Expires<input name="expires_at" type="date"
                    value="{escape((code["expires_at"] or "")[:10])}"></label>
@@ -473,6 +515,7 @@ def code_page(code, apps, redemptions, platforms, countries) -> str:
           </form></div>''')}
         <div class="split">{bars(platforms, "Platforms")}
           {bars(countries, "Countries", flags=True)}</div>
+        {bars(app_uses, "Uses by app")}
         {section("Redemptions",
                  redemption_table(redemptions, with_app=True, with_code=False))}""",
     )

@@ -149,9 +149,30 @@ Retry on a network failure with the **same** nonce, never a new one.
 
 ## Notes
 
-- A global code (no app) works in every registered app and spends one use per app it is
-  redeemed in.
+- Each code applies to one app, a selected set of apps, or all registered apps. Global
+  codes also work in apps registered later; selected sets do not automatically grow.
+- The same text can belong to separate codes when their app selections do not overlap.
+  A global code cannot have the same text as any other code. Matching ignores whitespace
+  and letter case, as before.
+- The app still sends only its slug and the code text. The server checks the app exists,
+  then finds the code assigned to it or a global code.
+- **Shared across apps:** a limit of 100 allows 100 total redemptions across the covered apps.
+  **Per app:** a limit of 100 allows 100 redemptions in each covered app. Leaving the limit
+  empty allows unlimited uses in either mode.
+- A device can redeem once in each covered app. Repeating the same device/app/code redemption
+  does not consume another use. Anonymous redemptions consume a use for each new nonce.
+- Changing a code's quota mode or limit keeps its recorded uses; it does not reset the quota.
+- Panel URLs use the internal code ID (`/c/<id>`), so identical texts have separate pages.
+  CSV exports include the quota mode and app selection (`all` or semicolon-separated slugs).
+- Deleting an app keeps codes shared with other apps and global codes, including their consumed
+  uses. Codes with no remaining assigned apps are removed along with their redemption history.
 - Rate limits are 30 requests per minute per IP and 30 per hour per device.
 - Send nothing beyond these fields. The request IP is used to rate limit and then forgotten,
   and never stored. See the privacy section of the README for what each mode means for your
   store listing.
+
+## Database format
+
+This pre-release schema uses `codes.id`, `code_apps(code_id, app_slug)`, and
+`redemptions.code_id`. There is no migration from the earlier schema keyed by code text.
+Use a fresh database file; old-format databases and backups are rejected before replacing data.

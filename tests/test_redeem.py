@@ -24,28 +24,28 @@ class RedeemTest(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_grants_and_counts(self):
-        self.db.add_code("FREE99", "99arcade")
+        self.free_id = self.db.add_code("FREE99", "99arcade")
         self.assertEqual(self.db.redeem("99arcade", "free99", "device-a"), (True, "ok"))
-        self.assertEqual(self.db.code("FREE99")["uses"], 1)
+        self.assertEqual(self.db.code(self.free_id)["uses"], 1)
 
     def test_same_device_does_not_consume_twice(self):
-        self.db.add_code("FREE99", "99arcade", max_uses=1)
+        self.free_id = self.db.add_code("FREE99", "99arcade", max_uses=1)
         self.db.redeem("99arcade", "FREE99", "device-a")
         self.assertEqual(self.db.redeem("99arcade", "FREE99", "device-a"), (True, "already"))
-        self.assertEqual(self.db.code("FREE99")["uses"], 1)
+        self.assertEqual(self.db.code(self.free_id)["uses"], 1)
 
     def test_exhausted(self):
-        self.db.add_code("FREE99", "99arcade", max_uses=1)
+        self.free_id = self.db.add_code("FREE99", "99arcade", max_uses=1)
         self.db.redeem("99arcade", "FREE99", "device-a")
         self.assertEqual(self.db.redeem("99arcade", "FREE99", "device-b"), (False, "exhausted"))
 
     def test_unlimited_by_default(self):
-        self.db.add_code("FREE99", "99arcade")
+        self.free_id = self.db.add_code("FREE99", "99arcade")
         for i in range(5):
             self.assertTrue(self.db.redeem("99arcade", "FREE99", f"device-{i}")[0])
 
     def test_wrong_app(self):
-        self.db.add_code("FREE99", "99arcade")
+        self.free_id = self.db.add_code("FREE99", "99arcade")
         self.assertEqual(self.db.redeem("99puzzle", "FREE99", "device-a"), (False, "wrong_app"))
 
     def test_global_code_works_everywhere_and_counts_per_app(self):
@@ -55,8 +55,8 @@ class RedeemTest(unittest.TestCase):
         self.assertEqual(self.db.redeem("99arcade", "PRESS", "device-b"), (False, "exhausted"))
 
     def test_disabled(self):
-        self.db.add_code("FREE99", "99arcade")
-        self.db.set_enabled("FREE99", False)
+        self.free_id = self.db.add_code("FREE99", "99arcade")
+        self.db.set_enabled(self.free_id, False)
         self.assertEqual(self.db.redeem("99arcade", "FREE99", "device-a"), (False, "disabled"))
 
     def test_expired(self):
@@ -70,16 +70,16 @@ class RedeemTest(unittest.TestCase):
         self.assertEqual(self.db.redeem("99relax", "NOPE", "device-a"), (False, "unknown_app"))
 
     def test_deleting_code_removes_its_redemptions(self):
-        self.db.add_code("FREE99", "99arcade")
+        self.free_id = self.db.add_code("FREE99", "99arcade")
         self.db.redeem("99arcade", "FREE99", "device-a")
-        self.db.delete_code("FREE99")
+        self.db.delete_code(self.free_id)
         self.assertEqual(self.db.redemptions(), [])
 
     def test_backup_is_readable(self):
-        self.db.add_code("FREE99", "99arcade")
+        self.free_id = self.db.add_code("FREE99", "99arcade")
         copy = self.db.backup_to(Path(self.tmp.name) / "copy.db")
         restored = Database(copy)
-        self.assertIsNotNone(restored.code("FREE99"))
+        self.assertIsNotNone(restored.code(self.free_id))
         restored.close()
 
 
@@ -92,7 +92,7 @@ class MetadataTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.db = Database(Path(self.tmp.name) / "test.db")
         self.db.add_app("99arcade", "99 Arcade")
-        self.db.add_code("FREE99", "99arcade")
+        self.free_id = self.db.add_code("FREE99", "99arcade")
 
     def tearDown(self) -> None:
         self.db.close()
@@ -132,11 +132,11 @@ class MetadataTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.db.add_app("99arcade", "Otra")
         with self.assertRaises(ValueError):
-            self.db.add_code("FREE99", "99arcade")
+            self.free_id = self.db.add_code("FREE99", "99arcade")
 
     def test_deleting_app_removes_its_codes(self):
         self.db.delete_app("99arcade")
-        self.assertIsNone(self.db.code("FREE99"))
+        self.assertIsNone(self.db.code(self.free_id))
 
 
 class AnonymousTest(unittest.TestCase):
@@ -150,23 +150,23 @@ class AnonymousTest(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_stores_no_device(self):
-        self.db.add_code("FREE99", "99arcade")
+        self.free_id = self.db.add_code("FREE99", "99arcade")
         self.assertEqual(self.db.redeem("99arcade", "FREE99"), (True, "ok"))
         self.assertIsNone(self.db.redemptions()[0]["device_id"])
 
     def test_each_redemption_spends_a_use(self):
-        self.db.add_code("FREE99", "99arcade", max_uses=2)
+        self.free_id = self.db.add_code("FREE99", "99arcade", max_uses=2)
         self.db.redeem("99arcade", "FREE99")
         self.db.redeem("99arcade", "FREE99")
         self.assertEqual(self.db.redeem("99arcade", "FREE99"), (False, "exhausted"))
 
     def test_limits_still_apply(self):
-        self.db.add_code("OFFX", "99arcade")
-        self.db.set_enabled("OFFX", False)
+        self.off_id = self.db.add_code("OFFX", "99arcade")
+        self.db.set_enabled(self.off_id, False)
         self.assertEqual(self.db.redeem("99arcade", "OFFX"), (False, "disabled"))
 
     def test_devices_total_ignores_anonymous(self):
-        self.db.add_code("FREE99", "99arcade")
+        self.free_id = self.db.add_code("FREE99", "99arcade")
         self.db.redeem("99arcade", "FREE99")
         self.db.redeem("99arcade", "FREE99", "device-a")
         self.assertEqual(self.db.totals()["devices"], 1)
@@ -222,7 +222,7 @@ class ScopeTest(unittest.TestCase):
         self.db.add_app("99arcade", "99 Arcade")
         self.db.add_app("99puzzle", "99 Puzzle")
         self.db.add_code("GLOBAL1", None)
-        self.db.add_code("ARCADE1", "99arcade")
+        self.arcade_id = self.db.add_code("ARCADE1", "99arcade")
         self.db.redeem("99arcade", "GLOBAL1", "d1", platform="ios", country="ES")
         self.db.redeem("99puzzle", "GLOBAL1", "d2", platform="ios", country="US")
         self.db.redeem("99arcade", "ARCADE1", "d3", platform="android", country="DE")
@@ -238,9 +238,9 @@ class ScopeTest(unittest.TestCase):
         self.assertEqual({c["value"] for c in countries}, {"ES", "US"})
 
     def test_code_scope(self):
-        rows = self.db.breakdown("platform", code="arcade1")
+        rows = self.db.breakdown("platform", code=self.arcade_id)
         self.assertEqual([(r["value"], r["count"]) for r in rows], [("android", 1)])
-        self.assertEqual(len(self.db.redemptions(code="ARCADE1")), 1)
+        self.assertEqual(len(self.db.redemptions(code=self.arcade_id)), 1)
 
     def test_app_scope_includes_global_codes_redeemed_there(self):
         rows = self.db.redemptions(app_slug="99arcade")

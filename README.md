@@ -29,12 +29,16 @@ some away.
   platform restriction (iOS, Android or both).
 - Generate codes in batches, or set your own. A new batch is marked in the table and can be
   exported to CSV on its own.
-- Global codes valid in every registered app.
+- Codes for one app, selected apps, or all registered apps (including future apps).
+- Reuse the same code text in separate apps, with independent settings and history.
+  Two codes cannot overlap in the apps they cover; global codes cannot reuse an existing text.
+- Choose a shared usage limit or a separate limit per app. Unlimited works in either mode.
 - Redemption log with platform, app version, country and device, broken down by app, by code
   and across the global codes.
 - Two modes: identified by a device UUID, or fully anonymous.
 - Redeeming twice never spends a second use.
-- Daily compressed backups, taken by the server itself.
+- Daily compressed backups, taken by the server itself, downloadable and restorable from
+  the panel.
 
 ## Run it
 
@@ -124,6 +128,10 @@ compressed snapshot daily and keeps the last `REDEEMER_BACKUP_KEEP`. A snapshot 
 ```
 docker compose exec redeemer python -m redeemer backup
 ```
+
+The **Backup** page downloads a snapshot and restores one, compressed or plain. Restoring
+replaces every app, code and redemption, and snapshots the current state first. Snapshots sit on
+the same volume as the database, so a downloaded copy is what survives losing the host.
 
 Moving to another host is one file. Copy `redeemer.db` into the new volume and start. Redemptions
 already granted are unaffected by downtime — they live on the device.

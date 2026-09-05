@@ -6,14 +6,17 @@ import os
 import threading
 import time
 import traceback
+from datetime import datetime, timezone
+from email.parser import BytesParser
 from hashlib import sha256
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from . import views
-from .backup import schedule
+from .backup import dump, filename, load, schedule, snapshot
 from .db import (
     COUNTRY,
     DEVICE,
@@ -28,6 +31,7 @@ from .db import (
 )
 
 MAX_BODY = 64 * 1024
+MAX_UPLOAD = 128 * 1024 * 1024
 NONCE_TTL = 600
 SESSION_COOKIE = "redeemer_session"
 SESSION_TTL = 7 * 24 * 3600
@@ -94,6 +98,7 @@ class Nonces:
 class Handler(BaseHTTPRequestHandler):
     server_version = "Redeemer"
     protocol_version = "HTTP/1.1"
+    limit = MAX_BODY
 
     # --- plumbing -----------------------------------------------------------
 
@@ -128,7 +133,7 @@ class Handler(BaseHTTPRequestHandler):
             if not chunk:
                 break
             remaining -= len(chunk)
-            if length <= MAX_BODY:
+            if length <= self.limit:
                 chunks.append(chunk)
         self._body = b"".join(chunks)
         return self._body
@@ -136,6 +141,19 @@ class Handler(BaseHTTPRequestHandler):
     def query(self, name: str) -> str:
         values = parse_qs(urlparse(self.path).query).get(name)
         return values[0][:64] if values else ""
+
+    def upload(self, field: str) -> bytes:
+        """The panel has one file field, so multipart is read here instead of pulled in."""
+        content_type = self.headers.get("Content-Type", "")
+        if not content_type.startswith("multipart/form-data"):
+            return b""
+        message = BytesParser().parsebytes(
+            b"Content-Type: " + content_type.encode() + b"\r\n\r\n" + self.body()
+        )
+        for part in message.walk():
+            if part.get_param("name", header="content-disposition") == field:
+                return part.get_payload(decode=True) or b""
+        return b""
 
     def form(self) -> dict[str, str]:
         parsed = parse_qs(self.body().decode("utf-8", "replace"), keep_blank_values=True)
@@ -227,6 +245,11 @@ class Handler(BaseHTTPRequestHandler):
             return self.html(self.render_dashboard())
         if path == "/apps/new":
             return self.html(views.new_app(self.db.apps()))
+        if path == "/backup":
+            return self.html(self.render_backup())
+        if path == "/backup.db.gz":
+            return self.send(200, dump(self.db), "application/gzip",
+                             [("Content-Disposition", f'attachment; filename="{filename()}"')])
         if path == "/global":
             return self.html(self.render_app(None, None, fresh=self.query("batch")))
         if path == "/global/codes.csv":
@@ -242,7 +265,7 @@ class Handler(BaseHTTPRequestHandler):
             code = self.db.code(path[3:])
             if code is None:
                 return self.html(views.not_found(self.db.apps()), 404)
-            name = code["code"]
+            name = code["id"]
             return self.html(
                 views.code_page(
                     code,
@@ -250,6 +273,8 @@ class Handler(BaseHTTPRequestHandler):
                     self.db.redemptions(code=name),
                     self.db.breakdown("platform", code=name),
                     self.db.breakdown("country", code=name),
+                    self.db.code_apps(name),
+                    self.db.breakdown("app_slug", code=name, limit=10000),
                 )
             )
         return self.html(views.not_found(self.db.apps()), 404)
@@ -258,8 +283,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         self._body = None
-        self.body()
         path = urlparse(self.path).path
+        self.limit = MAX_UPLOAD if path == "/restore" else MAX_BODY
+        self.body()
         if path == "/v1/redeem":
             return self.api_redeem()
         if path == "/login":
@@ -270,6 +296,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.redirect("/login", [self._session_cookie("", 0)])
         if path == "/apps":
             return self.create_app()
+        if path == "/restore":
+            return self.restore()
         if path == "/global/codes":
             return self.create_codes(None)
         if path.startswith("/a/") and path.endswith("/codes"):
@@ -281,16 +309,16 @@ class Handler(BaseHTTPRequestHandler):
             code = self.db.code(path[3:-7])
             if code is None:
                 return self.html(views.not_found(self.db.apps()), 404)
-            self.db.delete_code(code["code"])
-            return self.redirect(f"/a/{code['app_slug']}" if code["app_slug"] else "/global")
+            self.db.delete_code(code["id"])
+            return self.redirect("/")
         if path.startswith("/c/") and path.endswith("/toggle"):
             code = self.db.code(path[3:-7])
             if code is None:
                 return self.html(views.not_found(self.db.apps()), 404)
-            self.db.set_enabled(code["code"], not code["enabled"])
+            self.db.set_enabled(code["id"], not code["enabled"])
             return self.redirect(self.back())
         if path.startswith("/c/"):
-            return self.update_code(normalize_code(path[3:]))
+            return self.update_code(path[3:])
         return self.html(views.not_found(self.db.apps()), 404)
 
     # --- api ----------------------------------------------------------------
@@ -379,6 +407,7 @@ class Handler(BaseHTTPRequestHandler):
         quantity = min(500, self.number(data.get("quantity"), 1))
         custom = normalize_code(data.get("code", ""))
         options = {
+            "quota_mode": data.get("quota_mode", "shared"),
             "note": data.get("note", ""),
             "max_uses": self.number(data.get("max_uses")),
             "expires_at": self.expiry(data.get("expires_at")),
@@ -386,8 +415,20 @@ class Handler(BaseHTTPRequestHandler):
         }
         batch = generate_batch()
         try:
+            scope = data.get("scope", "selected" if app_slug else "global")
+            if scope not in ("selected", "global"):
+                raise ValueError("Choose selected apps or all apps.")
+            targets = [key[4:] for key, value in data.items() if key.startswith("app:") and value == "1"]
+            if "scope" not in data and app_slug:
+                targets = [app_slug]
+            if scope == "selected":
+                options["app_slugs"] = targets
+                if targets:
+                    target = f"/a/{targets[0]}"
+            else:
+                target = "/global"
             for _ in range(1 if custom else quantity):
-                self.db.add_code(custom or generate_code(), app_slug, batch=batch, **options)
+                self.db.add_code(custom or generate_code(), batch=batch, **options)
         except ValueError as error:
             app = self.db.app(app_slug) if app_slug else None
             return self.html(self.render_app(app, app_slug, values=data, error=str(error)), 400)
@@ -425,12 +466,13 @@ class Handler(BaseHTTPRequestHandler):
     def codes_csv(self, app_slug: str | None) -> None:
         if app_slug is not None and self.db.app(app_slug) is None:
             return self.html(views.not_found(self.db.apps()), 404)
-        rows = ["code,note,uses,max_uses,expires_at,enabled"]
+        rows = ["code,note,uses,max_uses,expires_at,enabled,quota_mode,apps"]
         for c in self.db.codes(app_slug, batch=self.query("batch")):
             note = c["note"].replace('"', '""')
             rows.append(
                 f'{c["code"]},"{note}",{c["uses"]},{c["max_uses"] if c["max_uses"] is not None else ""},'
-                f'{c["expires_at"] or ""},{"yes" if c["enabled"] else "no"}'
+                f'{c["expires_at"] or ""},{"yes" if c["enabled"] else "no"},{c["quota_mode"]},'
+                f'{"all" if c["is_global"] else ";".join(self.db.code_apps(c["id"]))}'
             )
         name = f"{app_slug or 'global'}-codes.csv"
         self.send(
@@ -439,6 +481,22 @@ class Handler(BaseHTTPRequestHandler):
             "text/csv; charset=utf-8",
             [("Content-Disposition", f'attachment; filename="{name}"')],
         )
+
+    def render_backup(self, error: str = "") -> str:
+        files = sorted(Path(self.config.backup_dir).glob("redeemer-*.db.gz"))
+        latest = (
+            f"{datetime.fromtimestamp(files[-1].stat().st_mtime, timezone.utc):%Y-%m-%d %H:%M}"
+            if files else ""
+        )
+        return views.backup_page(self.db.apps(), len(files), latest, error)
+
+    def restore(self) -> None:
+        try:
+            snapshot(self.db, self.config.backup_dir, self.config.backup_keep)
+            load(self.db, self.upload("file"))
+        except ValueError as error:
+            return self.html(self.render_backup(str(error)), 400)
+        return self.redirect("/")
 
     def update_code(self, code: str) -> None:
         if self.db.code(code) is None:
@@ -452,6 +510,7 @@ class Handler(BaseHTTPRequestHandler):
                 expires_at=self.expiry(data.get("expires_at")),
                 platforms=data.get("platforms", ""),
                 enabled=data.get("enabled") == "1",
+                quota_mode=data.get("quota_mode", "shared"),
             )
         except ValueError:
             return self.html(views.not_found(self.db.apps()), 400)

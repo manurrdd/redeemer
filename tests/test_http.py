@@ -15,13 +15,14 @@ class HttpTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         config = Config()
         config.db_path = str(Path(self.tmp.name) / "test.db")
+        config.backup_dir = str(Path(self.tmp.name) / "backups")
         config.host, config.port = "127.0.0.1", 0
         config.password = "secreto"
         self.server = Server(config)
         self.port = self.server.server_address[1]
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.server.db.add_app("99arcade", "99 Arcade")
-        self.server.db.add_code("FREE99", "99arcade", max_uses=1)
+        self.free_id = self.server.db.add_code("FREE99", "99arcade", max_uses=1)
 
     def tearDown(self) -> None:
         self.server.shutdown()
@@ -30,7 +31,7 @@ class HttpTest(unittest.TestCase):
 
     def request(self, method: str, path: str, body=None, headers=None):
         conn = HTTPConnection("127.0.0.1", self.port, timeout=5)
-        payload = json.dumps(body).encode() if body is not None else None
+        payload = body.encode() if isinstance(body, str) else (json.dumps(body).encode() if body is not None else None)
         conn.request(method, path, payload, headers or {"Content-Type": "application/json"})
         response = conn.getresponse()
         data = response.read()
@@ -125,24 +126,24 @@ class HttpTest(unittest.TestCase):
     def test_toggle_and_delete_code(self):
         cookie = self.login()
         headers = {"Cookie": cookie, "Content-Type": "application/x-www-form-urlencoded"}
-        self.request("POST", "/c/FREE99/toggle", None, headers)
-        self.assertEqual(self.server.db.code("FREE99")["enabled"], 0)
-        self.request("POST", "/c/FREE99/delete", None, headers)
-        self.assertIsNone(self.server.db.code("FREE99"))
+        self.request("POST", f"/c/{self.free_id}/toggle", None, headers)
+        self.assertEqual(self.server.db.code(self.free_id)["enabled"], 0)
+        self.request("POST", f"/c/{self.free_id}/delete", None, headers)
+        self.assertIsNone(self.server.db.code(self.free_id))
 
     def test_toggle_ignores_external_referer(self):
         headers = {"Cookie": self.login(), "Referer": "https://evil.example/x",
                    "Content-Type": "application/x-www-form-urlencoded"}
-        response, _ = self.request("POST", "/c/FREE99/toggle", None, headers)
+        response, _ = self.request("POST", f"/c/{self.free_id}/toggle", None, headers)
         self.assertEqual(response.getheader("Location"), "/x")
 
     def test_nonce_grants_once_and_replays(self):
-        self.server.db.add_code("ANON", "99arcade", max_uses=1)
+        self.anon_id = self.server.db.add_code("ANON", "99arcade", max_uses=1)
         first = self.redeem(app="99arcade", code="ANON", nonce="attempt-1")
         retry = self.redeem(app="99arcade", code="ANON", nonce="attempt-1")
         self.assertEqual(first[1], {"granted": True, "reason": "ok"})
         self.assertEqual(retry[1], {"granted": True, "reason": "already"})
-        self.assertEqual(self.server.db.code("ANON")["uses"], 1)
+        self.assertEqual(self.server.db.code(self.anon_id)["uses"], 1)
 
     def test_nonce_replays_failures_too(self):
         first = self.redeem(app="99arcade", code="NOPE", nonce="attempt-2")
@@ -151,7 +152,7 @@ class HttpTest(unittest.TestCase):
         self.assertFalse(retry[1]["granted"])
 
     def test_new_nonce_spends_another_use(self):
-        self.server.db.add_code("ANON", "99arcade", max_uses=1)
+        self.anon_id = self.server.db.add_code("ANON", "99arcade", max_uses=1)
         self.redeem(app="99arcade", code="ANON", nonce="attempt-1")
         status, body = self.redeem(app="99arcade", code="ANON", nonce="attempt-2")
         self.assertEqual(body["reason"], "exhausted")
@@ -170,7 +171,7 @@ class HttpTest(unittest.TestCase):
         response.read()
         conn.close()
         self.assertEqual(response.status, 303)
-        self.assertIsNone(self.server.db.code("SAFE1")["max_uses"])
+        self.assertIsNone(next(c for c in self.server.db.codes("99arcade") if c["code"] == "SAFE1")["max_uses"])
 
     def test_unknown_app_and_code_are_404(self):
         headers = {"Cookie": self.login(), "Content-Type": "application/x-www-form-urlencoded"}
@@ -213,6 +214,101 @@ class HttpTest(unittest.TestCase):
         csv, data = self.request("GET", f"/a/99arcade/codes.csv?batch={batch}",
                                  headers={"Cookie": headers["Cookie"]})
         self.assertEqual(len(data.decode().strip().splitlines()), 4)
+
+    def upload(self, cookie: str, payload: bytes):
+        boundary = "----test"
+        body = (
+            f'--{boundary}\r\nContent-Disposition: form-data; name="file"; '
+            'filename="backup.db.gz"\r\nContent-Type: application/octet-stream\r\n\r\n'
+        ).encode() + payload + f"\r\n--{boundary}--\r\n".encode()
+        conn = HTTPConnection("127.0.0.1", self.port, timeout=5)
+        conn.request("POST", "/restore", body,
+                     {"Cookie": cookie, "Content-Type":
+                      f"multipart/form-data; boundary={boundary}"})
+        response = conn.getresponse()
+        data = response.read()
+        conn.close()
+        return response, data
+
+    def test_backup_round_trip(self):
+        cookie = self.login()
+        response, blob = self.request("GET", "/backup.db.gz", headers={"Cookie": cookie})
+        self.assertEqual((response.status, blob[:2]), (200, b"\x1f\x8b"))
+        self.server.db.delete_app("99arcade")
+        restored, _ = self.upload(cookie, blob)
+        self.assertEqual(restored.status, 303)
+        self.assertIsNotNone(self.server.db.app("99arcade"))
+        self.assertIsNotNone(self.server.db.code(self.free_id))
+
+    def test_restore_keeps_the_session(self):
+        cookie = self.login()
+        _, blob = self.request("GET", "/backup.db.gz", headers={"Cookie": cookie})
+        self.upload(cookie, blob)
+        response, _ = self.request("GET", "/backup", headers={"Cookie": cookie})
+        self.assertEqual(response.status, 200)
+
+    def test_restore_rejects_anything_else(self):
+        cookie = self.login()
+        response, body = self.upload(cookie, b"not a database")
+        self.assertEqual(response.status, 400)
+        self.assertIn(b"Not a Redeemer backup.", body)
+        self.assertIsNotNone(self.server.db.app("99arcade"))
+
+    def test_selected_and_global_scopes_with_both_quotas(self):
+        self.server.db.add_app("second", "Second")
+        self.server.db.add_app("outside", "Outside")
+        headers = {"Cookie": self.login(), "Content-Type": "application/x-www-form-urlencoded"}
+        for scope in ("selected", "global"):
+            for mode in ("shared", "per_app"):
+                text = f"{scope}-{mode}".replace("_", "-").upper()
+                payload = f"code={text}&scope={scope}&app:99arcade=1&app:second=1&quota_mode={mode}&max_uses=1"
+                response, _ = self.request("POST", "/a/99arcade/codes", payload, headers)
+                self.assertEqual(response.status, 303)
+                self.assertTrue(self.redeem(app="99arcade", code=text, device_id="d1")[1]["granted"])
+                second = self.redeem(app="second", code=text, device_id="d1")[1]
+                self.assertEqual(second["granted"], mode == "per_app")
+                if scope == "selected":
+                    self.assertEqual(self.redeem(app="outside", code=text, device_id="d1")[1]["reason"], "wrong_app")
+                row = next(c for c in self.server.db.codes("99arcade") if c["code"] == text)
+                page, body = self.request("GET", f"/c/{row['id']}", headers=headers)
+                self.assertEqual(page.status, 200)
+                self.assertIn(b"Uses by app", body)
+                self.assertIn(b"Quota", body)
+                self.assertIn(b"/app" if mode == "per_app" else b"shared", body)
+        _, csv = self.request("GET", "/a/99arcade/codes.csv", headers=headers)
+        self.assertIn(b"quota_mode,apps", csv)
+        self.assertIn(b"per_app", csv)
+
+    def test_duplicate_text_panel_actions_are_independent(self):
+        self.server.db.add_app("second", "Second")
+        other_id = self.server.db.add_code("FREE99", "second")
+        headers = {"Cookie": self.login(), "Content-Type": "application/x-www-form-urlencoded"}
+        response, _ = self.request("POST", f"/c/{self.free_id}",
+                                   "note=Changed&quota_mode=per_app&max_uses=2&enabled=1", headers)
+        self.assertEqual(response.status, 303)
+        self.assertEqual(self.server.db.code(self.free_id)["quota_mode"], "per_app")
+        self.assertEqual(self.server.db.code(other_id)["quota_mode"], "shared")
+        response, body = self.request("GET", "/a/second", headers=headers)
+        self.assertEqual(response.status, 200)
+        self.assertIn(f'/c/{other_id}'.encode(), body)
+        self.assertNotIn(f'/c/{self.free_id}/toggle'.encode(), body)
+        self.request("POST", f"/c/{self.free_id}/delete", None, headers)
+        self.assertIsNotNone(self.server.db.code(other_id))
+        self.assertTrue(self.redeem(app="second", code="FREE99", device_id="d1")[1]["granted"])
+
+    def test_invalid_selection_preserves_form_and_creates_nothing(self):
+        headers = {"Cookie": self.login(), "Content-Type": "application/x-www-form-urlencoded"}
+        response, body = self.request("POST", "/a/99arcade/codes",
+                                       "code=CHOSEN&scope=selected&quota_mode=per_app", headers)
+        self.assertEqual(response.status, 400)
+        self.assertIn(b"Select at least one app", body)
+        self.assertIn(b'value="CHOSEN"', body)
+        self.assertIn(b'value="per_app" selected', body)
+        self.assertEqual(self.server.db.totals()["codes"], 1)
+        response, body = self.request("POST", "/global/codes",
+                                       "code=FREE99&scope=global&quota_mode=shared", headers)
+        self.assertEqual(response.status, 400)
+        self.assertIn(b"already applies", body)
 
     def test_healthz(self):
         response, data = self.request("GET", "/healthz")

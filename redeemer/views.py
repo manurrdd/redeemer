@@ -89,6 +89,11 @@ td.act { text-align: right; padding: 6px 8px; }
 .code-link { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13.5px;
              font-weight: 550; }
 .code-link:hover { color: var(--accent); }
+tr.fresh td { background: var(--accent-soft); }
+tr.fresh td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
+.fresh-note { display: flex; align-items: baseline; gap: 10px; margin: 0 0 10px;
+              font-size: 13px; color: var(--accent); }
+.fresh-note a { font-weight: 550; }
 .empty { padding: 34px 16px; text-align: center; color: var(--faint); font-size: 13.5px; }
 .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 7px;
        vertical-align: 1px; background: var(--ok); }
@@ -279,14 +284,15 @@ def _uses(row) -> str:
     return f'{row["uses"]} / {"∞" if row["max_uses"] is None else row["max_uses"]}'
 
 
-def code_rows(codes) -> list[str]:
+def code_rows(codes, fresh: str = "") -> list[str]:
     rows = []
     for c in codes:
         code = escape(c["code"])
+        new = ' class="fresh"' if fresh and c["batch"] == fresh else ""
         platform = PLATFORMS.get(c["platforms"] or "", c["platforms"] or "Any")
         expires = (c["expires_at"] or "")[:10]
         rows.append(
-            "<tr>"
+            f"<tr{new}>"
             f'<td><a class="code-link" href="/c/{code}">{code}</a></td>'
             f'<td class="muted">{escape(c["note"]) or ""}</td>'
             f'<td class="num">{_uses(c)}</td>'
@@ -301,10 +307,10 @@ def code_rows(codes) -> list[str]:
     return rows
 
 
-def code_table(codes) -> str:
+def code_table(codes, fresh: str = "") -> str:
     head = ("<tr><th>Code</th><th>Note</th><th class=num>Uses</th><th>Platform</th>"
             "<th>Expires</th><th>Status</th><th></th></tr>")
-    return table(head, code_rows(codes), "No codes yet")
+    return table(head, code_rows(codes, fresh), "No codes yet")
 
 
 def redemption_table(redemptions, *, with_app: bool = False, with_code: bool = True) -> str:
@@ -398,7 +404,8 @@ def new_app(apps, values=None, error="") -> str:
     )
 
 
-def app_page(app, apps, codes, redemptions, platforms, countries, values=None, error="") -> str:
+def app_page(app, apps, codes, redemptions, platforms, countries,
+             values=None, error="", fresh="", fresh_count=0) -> str:
     values = values or {}
     slug = app["slug"] if app else None
     title = app["name"] if app else "Global codes"
@@ -417,19 +424,24 @@ def app_page(app, apps, codes, redemptions, platforms, countries, values=None, e
                 + facts("Valid in every app. Each app spends one use.",
                         _plural(len(codes), "code", "codes"),
                         _plural(used, "redemption", "redemptions")))
-    charts = (f'<div class="split">{bars(platforms, "Platforms")}'
-              f'{bars(countries, "Countries", flags=True)}</div>' if slug else "")
+    banner = ""
+    if fresh_count:
+        banner = (f'<p class="fresh-note">{fresh_count} '
+                  f'{"code" if fresh_count == 1 else "codes"} just created'
+                  f'<a href="{base}/codes.csv?batch={escape(fresh)}">Export just these</a></p>')
     return page(
         title, apps, f"app:{slug}" if slug else "global",
         f"""{head}
         {section("New codes", warn(error) + code_form(base + "/codes", values))}
-        {section("Codes", code_table(codes), link=(base + "/codes.csv", "Export CSV"))}
-        {charts}
+        {section("Codes", banner + code_table(codes, fresh),
+                 link=(base + "/codes.csv", "Export CSV"))}
+        <div class="split">{bars(platforms, "Platforms")}
+          {bars(countries, "Countries", flags=True)}</div>
         {section("Latest redemptions", redemption_table(redemptions, with_app=not slug))}""",
     )
 
 
-def code_page(code, apps, redemptions) -> str:
+def code_page(code, apps, redemptions, platforms, countries) -> str:
     name = escape(code["code"])
     scope = (f'<a href="/a/{escape(code["app_slug"])}" style="color:var(--accent)">'
              f'{escape(code["app_slug"])}</a>' if code["app_slug"] else "every app")
@@ -459,6 +471,8 @@ def code_page(code, apps, redemptions) -> str:
                    {"checked" if code["enabled"] else ""}> Enabled</label>
             <button>Save</button>
           </form></div>''')}
+        <div class="split">{bars(platforms, "Platforms")}
+          {bars(countries, "Countries", flags=True)}</div>
         {section("Redemptions",
                  redemption_table(redemptions, with_app=True, with_code=False))}""",
     )

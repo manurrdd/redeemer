@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS codes (
     max_uses   INTEGER,
     expires_at TEXT,
     platforms  TEXT,
+    batch      TEXT,
     enabled    INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL
 );
@@ -43,6 +44,7 @@ CREATE TABLE IF NOT EXISTS redemptions (
 );
 
 CREATE INDEX IF NOT EXISTS codes_by_app ON codes(app_slug);
+CREATE INDEX IF NOT EXISTS codes_by_batch ON codes(batch);
 CREATE INDEX IF NOT EXISTS redemptions_by_code ON redemptions(code);
 CREATE INDEX IF NOT EXISTS redemptions_by_app ON redemptions(app_slug);
 CREATE INDEX IF NOT EXISTS redemptions_by_time ON redemptions(redeemed_at DESC);
@@ -80,6 +82,11 @@ def normalize_code(code: str) -> str:
 
 def generate_code(length: int = 10) -> str:
     return "".join(secrets.choice(ALPHABET) for _ in range(length))
+
+
+def generate_batch() -> str:
+    """Marks the codes made by one submit, so the panel can point them out afterwards."""
+    return secrets.token_hex(4)
 
 
 def clean(value, pattern: re.Pattern[str], transform=str.strip) -> str | None:
@@ -188,6 +195,7 @@ class Database:
         max_uses: int | None = None,
         expires_at: str | None = None,
         platforms: str | None = None,
+        batch: str | None = None,
     ) -> str:
         code = normalize_code(code)
         if not CODE.match(code):
@@ -201,11 +209,11 @@ class Database:
         self.conn.execute(
             """
             INSERT INTO codes (code, app_slug, note, max_uses, expires_at, platforms,
-                               enabled, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+                               batch, enabled, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)
             """,
             (code, app_slug, note.strip(), max_uses, expires_at or None,
-             platforms or None, utcnow()),
+             platforms or None, batch, utcnow()),
         )
         return code
 
@@ -245,13 +253,16 @@ class Database:
             (normalize_code(code),),
         ).fetchone()
 
-    def codes(self, app_slug: str | None) -> list[sqlite3.Row]:
-        where = "c.app_slug IS NULL" if app_slug is None else "c.app_slug = ?"
-        params = () if app_slug is None else (app_slug,)
+    def codes(self, app_slug: str | None, *, batch: str | None = None) -> list[sqlite3.Row]:
+        where = ["c.app_slug IS NULL" if app_slug is None else "c.app_slug = ?"]
+        params = [] if app_slug is None else [app_slug]
+        if batch:
+            where.append("c.batch = ?")
+            params.append(batch)
         return self.conn.execute(
             f"""
             SELECT c.*, (SELECT COUNT(*) FROM redemptions r WHERE r.code = c.code) AS uses
-              FROM codes c WHERE {where}
+              FROM codes c WHERE {" AND ".join(where)}
              ORDER BY c.created_at DESC, c.code
             """,
             params,
@@ -259,29 +270,44 @@ class Database:
 
     # --- redemptions --------------------------------------------------------
 
-    def redemptions(
-        self, *, code: str | None = None, app_slug: str | None = None, limit: int = 50
-    ) -> list[sqlite3.Row]:
-        clauses, params = [], []
+    @staticmethod
+    def _scope(code: str | None, app_slug: str | None, only_global: bool) -> tuple[str, list]:
+        """Which redemptions a view is about: one code, one app, or the global codes."""
         if code is not None:
-            clauses.append("code = ?")
-            params.append(normalize_code(code))
+            return "WHERE code = ?", [normalize_code(code)]
         if app_slug is not None:
-            clauses.append("app_slug = ?")
-            params.append(app_slug)
-        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
-        params.append(limit)
+            return "WHERE app_slug = ?", [app_slug]
+        if only_global:
+            return "WHERE code IN (SELECT code FROM codes WHERE app_slug IS NULL)", []
+        return "", []
+
+    def redemptions(
+        self,
+        *,
+        code: str | None = None,
+        app_slug: str | None = None,
+        only_global: bool = False,
+        limit: int = 50,
+    ) -> list[sqlite3.Row]:
+        where, params = self._scope(code, app_slug, only_global)
         return self.conn.execute(
             f"SELECT * FROM redemptions {where} ORDER BY redeemed_at DESC, id DESC LIMIT ?",
-            params,
+            [*params, limit],
         ).fetchall()
 
-    def breakdown(self, field: str, *, app_slug: str | None = None, limit: int = 8) -> list[sqlite3.Row]:
+    def breakdown(
+        self,
+        field: str,
+        *,
+        code: str | None = None,
+        app_slug: str | None = None,
+        only_global: bool = False,
+        limit: int = 8,
+    ) -> list[sqlite3.Row]:
         """Redemption counts grouped by platform, country or app_version."""
         if field not in BREAKDOWN_FIELDS:
             raise ValueError("Unknown field.")
-        where = "WHERE app_slug = ?" if app_slug else ""
-        params = [app_slug] if app_slug else []
+        where, params = self._scope(code, app_slug, only_global)
         return self.conn.execute(
             f"""
             SELECT COALESCE({field}, '?') AS value, COUNT(*) AS count

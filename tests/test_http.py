@@ -197,6 +197,23 @@ class HttpTest(unittest.TestCase):
         self.assertTrue(ok[1]["granted"])
         self.assertEqual(no[1]["reason"], "wrong_platform")
 
+    def test_creating_codes_points_at_the_new_batch(self):
+        headers = {"Cookie": self.login(), "Content-Type": "application/x-www-form-urlencoded"}
+        conn = HTTPConnection("127.0.0.1", self.port, timeout=5)
+        conn.request("POST", "/a/99arcade/codes", "quantity=3", headers)
+        response = conn.getresponse()
+        response.read()
+        conn.close()
+        location = response.getheader("Location")
+        self.assertIn("?batch=", location)
+        page, body = self.request("GET", location, headers={"Cookie": headers["Cookie"]})
+        self.assertIn(b"3 codes just created", body)
+        self.assertIn(b'class="fresh"', body)
+        batch = location.split("?batch=")[1]
+        csv, data = self.request("GET", f"/a/99arcade/codes.csv?batch={batch}",
+                                 headers={"Cookie": headers["Cookie"]})
+        self.assertEqual(len(data.decode().strip().splitlines()), 4)
+
     def test_healthz(self):
         response, data = self.request("GET", "/healthz")
         self.assertEqual((response.status, json.loads(data)), (200, {"ok": True}))

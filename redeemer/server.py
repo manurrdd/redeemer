@@ -22,6 +22,7 @@ from .db import (
     VERSION,
     Database,
     clean,
+    generate_batch,
     generate_code,
     normalize_code,
 )
@@ -132,6 +133,10 @@ class Handler(BaseHTTPRequestHandler):
         self._body = b"".join(chunks)
         return self._body
 
+    def query(self, name: str) -> str:
+        values = parse_qs(urlparse(self.path).query).get(name)
+        return values[0][:64] if values else ""
+
     def form(self) -> dict[str, str]:
         parsed = parse_qs(self.body().decode("utf-8", "replace"), keep_blank_values=True)
         return {k: v[0] for k, v in parsed.items()}
@@ -223,7 +228,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/apps/new":
             return self.html(views.new_app(self.db.apps()))
         if path == "/global":
-            return self.html(self.render_app(None, None))
+            return self.html(self.render_app(None, None, fresh=self.query("batch")))
         if path == "/global/codes.csv":
             return self.codes_csv(None)
         if path.startswith("/a/") and path.endswith("/codes.csv"):
@@ -232,13 +237,20 @@ class Handler(BaseHTTPRequestHandler):
             app = self.db.app(path[3:])
             if app is None:
                 return self.html(views.not_found(self.db.apps()), 404)
-            return self.html(self.render_app(app, app["slug"]))
+            return self.html(self.render_app(app, app["slug"], fresh=self.query("batch")))
         if path.startswith("/c/"):
             code = self.db.code(path[3:])
             if code is None:
                 return self.html(views.not_found(self.db.apps()), 404)
+            name = code["code"]
             return self.html(
-                views.code_page(code, self.db.apps(), self.db.redemptions(code=code["code"]))
+                views.code_page(
+                    code,
+                    self.db.apps(),
+                    self.db.redemptions(code=name),
+                    self.db.breakdown("platform", code=name),
+                    self.db.breakdown("country", code=name),
+                )
             )
         return self.html(views.not_found(self.db.apps()), 404)
 
@@ -372,13 +384,14 @@ class Handler(BaseHTTPRequestHandler):
             "expires_at": self.expiry(data.get("expires_at")),
             "platforms": data.get("platforms", ""),
         }
+        batch = generate_batch()
         try:
             for _ in range(1 if custom else quantity):
-                self.db.add_code(custom or generate_code(), app_slug, **options)
+                self.db.add_code(custom or generate_code(), app_slug, batch=batch, **options)
         except ValueError as error:
             app = self.db.app(app_slug) if app_slug else None
-            return self.html(self.render_app(app, app_slug, data, str(error)), 400)
-        return self.redirect(target)
+            return self.html(self.render_app(app, app_slug, values=data, error=str(error)), 400)
+        return self.redirect(f"{target}?batch={batch}")
 
     @staticmethod
     def expiry(value: str | None) -> str | None:
@@ -394,25 +407,26 @@ class Handler(BaseHTTPRequestHandler):
             self.db.redemptions(limit=25),
         )
 
-    def render_app(self, app, app_slug: str | None, values=None, error: str = "") -> str:
+    def render_app(self, app, app_slug, values=None, error: str = "", fresh: str = "") -> str:
+        scope = {"app_slug": app_slug} if app_slug else {"only_global": True}
         return views.app_page(
             app,
             self.db.apps(),
             self.db.codes(app_slug),
-            self.db.redemptions(app_slug=app_slug, limit=25)
-            if app_slug
-            else self.db.redemptions(limit=25),
-            self.db.breakdown("platform", app_slug=app_slug) if app_slug else [],
-            self.db.breakdown("country", app_slug=app_slug) if app_slug else [],
+            self.db.redemptions(limit=25, **scope),
+            self.db.breakdown("platform", **scope),
+            self.db.breakdown("country", **scope),
             values,
             error,
+            fresh,
+            len(self.db.codes(app_slug, batch=fresh)) if fresh else 0,
         )
 
     def codes_csv(self, app_slug: str | None) -> None:
         if app_slug is not None and self.db.app(app_slug) is None:
             return self.html(views.not_found(self.db.apps()), 404)
         rows = ["code,note,uses,max_uses,expires_at,enabled"]
-        for c in self.db.codes(app_slug):
+        for c in self.db.codes(app_slug, batch=self.query("batch")):
             note = c["note"].replace('"', '""')
             rows.append(
                 f'{c["code"]},"{note}",{c["uses"]},{c["max_uses"] if c["max_uses"] is not None else ""},'

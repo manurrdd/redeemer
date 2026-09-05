@@ -27,9 +27,11 @@ some away.
 - Apps, codes and redemptions in one panel; light and dark.
 - Codes with a note, a usage limit, an expiry date, an on/off switch and an optional
   platform restriction (iOS, Android or both).
-- Generate codes in batches, or set your own. Export to CSV.
+- Generate codes in batches, or set your own. A new batch is marked in the table and can be
+  exported to CSV on its own.
 - Global codes valid in every registered app.
-- Redemption log with platform, app version, country and device, plus per-app breakdowns.
+- Redemption log with platform, app version, country and device, broken down by app, by code
+  and across the global codes.
 - Two modes: identified by a device UUID, or fully anonymous.
 - Redeeming twice never spends a second use.
 - Daily compressed backups, taken by the server itself.

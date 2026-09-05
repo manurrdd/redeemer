@@ -5,7 +5,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from redeemer.db import Database
+from redeemer.db import Database, generate_batch
 
 
 def stamp(days: int) -> str:
@@ -213,3 +213,58 @@ class PlatformScopeTest(unittest.TestCase):
 
     def test_slug_allows_dots(self):
         self.assertEqual(self.db.add_app("com.manu.arcade", "Arcade"), "com.manu.arcade")
+
+
+class ScopeTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db = Database(Path(self.tmp.name) / "test.db")
+        self.db.add_app("99arcade", "99 Arcade")
+        self.db.add_app("99puzzle", "99 Puzzle")
+        self.db.add_code("GLOBAL1", None)
+        self.db.add_code("ARCADE1", "99arcade")
+        self.db.redeem("99arcade", "GLOBAL1", "d1", platform="ios", country="ES")
+        self.db.redeem("99puzzle", "GLOBAL1", "d2", platform="ios", country="US")
+        self.db.redeem("99arcade", "ARCADE1", "d3", platform="android", country="DE")
+
+    def tearDown(self) -> None:
+        self.db.close()
+        self.tmp.cleanup()
+
+    def test_global_scope_covers_only_global_codes(self):
+        rows = self.db.redemptions(only_global=True)
+        self.assertEqual({r["code"] for r in rows}, {"GLOBAL1"})
+        countries = self.db.breakdown("country", only_global=True)
+        self.assertEqual({c["value"] for c in countries}, {"ES", "US"})
+
+    def test_code_scope(self):
+        rows = self.db.breakdown("platform", code="arcade1")
+        self.assertEqual([(r["value"], r["count"]) for r in rows], [("android", 1)])
+        self.assertEqual(len(self.db.redemptions(code="ARCADE1")), 1)
+
+    def test_app_scope_includes_global_codes_redeemed_there(self):
+        rows = self.db.redemptions(app_slug="99arcade")
+        self.assertEqual({r["code"] for r in rows}, {"GLOBAL1", "ARCADE1"})
+
+
+class BatchTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db = Database(Path(self.tmp.name) / "test.db")
+        self.db.add_app("99arcade", "99 Arcade")
+
+    def tearDown(self) -> None:
+        self.db.close()
+        self.tmp.cleanup()
+
+    def test_codes_can_be_filtered_by_batch(self):
+        first, second = generate_batch(), generate_batch()
+        self.db.add_code("AAAA1", "99arcade", batch=first)
+        self.db.add_code("BBBB1", "99arcade", batch=first)
+        self.db.add_code("CCCC1", "99arcade", batch=second)
+        self.assertEqual({c["code"] for c in self.db.codes("99arcade", batch=first)},
+                         {"AAAA1", "BBBB1"})
+        self.assertEqual(len(self.db.codes("99arcade")), 3)
+
+    def test_batches_are_distinct(self):
+        self.assertNotEqual(generate_batch(), generate_batch())
